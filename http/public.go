@@ -135,7 +135,7 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 // publicUploadHandler accepts a new file at the root of an upload-enabled
 // directory share. It does not accept nested paths or overwrites, keeping
 // anonymous access limited to adding files only.
-var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+var publicUploadHandler = func(_ http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	id, relativePath := ifPathWithName(r)
 	if id == "" || relativePath == "/" || strings.Contains(relativePath, "\\") || strings.Contains(strings.TrimPrefix(relativePath, "/"), "/") {
 		return http.StatusBadRequest, nil
