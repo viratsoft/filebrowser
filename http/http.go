@@ -92,6 +92,9 @@ func NewHandler(
 
 	public := api.PathPrefix("/public").Subrouter()
 	public.PathPrefix("/dl").Handler(monkey(publicDlHandler, "/api/public/dl/")).Methods("GET")
+	public.PathPrefix("/tus").Handler(monkey(publicTusPostHandler(uploadCache), "/api/public/tus/")).Methods("POST")
+	public.PathPrefix("/tus").Handler(monkey(publicTusHeadHandler(uploadCache), "/api/public/tus/")).Methods("HEAD", "GET")
+	public.PathPrefix("/tus").Handler(monkey(publicTusPatchHandler(uploadCache), "/api/public/tus/")).Methods("PATCH")
 	public.PathPrefix("/upload").Handler(monkey(publicUploadHandler, "/api/public/upload/")).Methods("POST")
 	public.PathPrefix("/share").Handler(monkey(publicShareHandler, "/api/public/share/")).Methods("GET")
 

@@ -190,6 +190,90 @@ func TestPublicUploadHandler(t *testing.T) {
 	}
 }
 
+func TestPublicTusUploadRequiresShareAuthorizationForEveryRequest(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("correct password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true, Create: true}, []byte("test-signing-key"))
+	if err := st.Share.Save(&share.Link{Hash: "resumable", UserID: 1, Path: "/shared", AllowUpload: true, UploadOnly: true, SessionUploadFolder: true, PasswordHash: string(passwordHash)}); err != nil {
+		t.Fatal(err)
+	}
+	cache := newMemoryUploadCache()
+	post := handle(publicTusPostHandler(cache), "/api/public/tus/", st, &settings.Server{})
+	patch := handle(publicTusPatchHandler(cache), "/api/public/tus/", st, &settings.Server{})
+	shareHandler := handle(publicShareHandler, "/api/public/share/", st, &settings.Server{})
+	downloadHandler := handle(publicDlHandler, "/api/public/dl/", st, &settings.Server{})
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/public/tus/resumable/report.txt", nil)
+	postReq.Header.Set("Upload-Length", "6")
+	postReq.Header.Set("X-SHARE-PASSWORD", "correct%20password")
+	postRec := httptest.NewRecorder()
+	post.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusCreated {
+		t.Fatalf("expected TUS create, got %d: %s", postRec.Code, postRec.Body.String())
+	}
+	cookies := postRec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected visitor cookie")
+	}
+
+	unauthorized := httptest.NewRequest(http.MethodPatch, "/api/public/tus/resumable/report.txt", strings.NewReader("secret"))
+	unauthorized.Header.Set("Content-Type", "application/offset+octet-stream")
+	unauthorized.Header.Set("Upload-Offset", "0")
+	unauthorizedRec := httptest.NewRecorder()
+	patch.ServeHTTP(unauthorizedRec, unauthorized)
+	if unauthorizedRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected password on every PATCH, got %d", unauthorizedRec.Code)
+	}
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/public/tus/resumable/report.txt", strings.NewReader("secret"))
+	patchReq.Header.Set("Content-Type", "application/offset+octet-stream")
+	patchReq.Header.Set("Upload-Offset", "0")
+	patchReq.Header.Set("X-SHARE-PASSWORD", "correct%20password")
+	for _, cookie := range cookies {
+		patchReq.AddCookie(cookie)
+	}
+	patchRec := httptest.NewRecorder()
+	patch.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusNoContent {
+		t.Fatalf("expected TUS patch, got %d: %s", patchRec.Code, patchRec.Body.String())
+	}
+	entries, err := os.ReadDir(shared)
+	if err != nil || len(entries) != 1 || !entries[0].IsDir() {
+		t.Fatalf("expected exactly one visitor folder, entries=%v err=%v", entries, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(shared, entries[0].Name(), "report.txt")); err != nil || string(data) != "secret" {
+		t.Fatalf("completed data mismatch: %q, %v", data, err)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/public/share/resumable/", nil)
+	listReq.Header.Set("X-SHARE-PASSWORD", "correct%20password")
+	for _, cookie := range cookies {
+		listReq.AddCookie(cookie)
+	}
+	listRec := httptest.NewRecorder()
+	shareHandler.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK || !strings.Contains(listRec.Body.String(), "report.txt") {
+		t.Fatalf("expected completed visitor file only, got %d: %s", listRec.Code, listRec.Body.String())
+	}
+	dlReq := httptest.NewRequest(http.MethodGet, "/api/public/dl/resumable/report.txt", nil)
+	dlReq.Header.Set("X-SHARE-PASSWORD", "correct%20password")
+	for _, cookie := range cookies {
+		dlReq.AddCookie(cookie)
+	}
+	dlRec := httptest.NewRecorder()
+	downloadHandler.ServeHTTP(dlRec, dlReq)
+	if dlRec.Code != http.StatusForbidden {
+		t.Fatalf("upload-only file must remain unreadable, got %d", dlRec.Code)
+	}
+}
+
 func TestUploadOnlyFileShareIsRejected(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("private"), 0o644); err != nil {

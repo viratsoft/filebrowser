@@ -9,6 +9,11 @@ type Upload = {
   rawProgress: {
     sentBytes: number;
   };
+  publicShare?: {
+    hash: string;
+    token: string;
+    password: string;
+  };
 };
 
 interface UploadEntry {

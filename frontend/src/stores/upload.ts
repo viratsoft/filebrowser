@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { useFileStore } from "./file";
-import { files as api } from "@/api";
+import { files as api, pub as publicApi } from "@/api";
 import buttons from "@/utils/buttons";
 import { computed, inject, markRaw, ref } from "vue";
 import * as tus from "@/api/tus";
@@ -38,7 +38,8 @@ export const useUploadStore = defineStore("upload", () => {
     name: string,
     file: File | null,
     overwrite: boolean,
-    type: ResourceType
+    type: ResourceType,
+    publicShare?: Upload["publicShare"]
   ) => {
     if (!hasActiveUploads() && !hasPendingUploads()) {
       window.addEventListener("beforeunload", beforeUnload);
@@ -57,6 +58,7 @@ export const useUploadStore = defineStore("upload", () => {
       rawProgress: markRaw({
         sentBytes: 0,
       }),
+      publicShare,
     };
 
     totalBytes.value += upload.totalBytes;
@@ -68,6 +70,11 @@ export const useUploadStore = defineStore("upload", () => {
   const abort = () => {
     // Resets the state by preventing the processing of the remaning uploads
     lastUpload.value = Infinity;
+    for (const upload of activeUploads.value) {
+      if (upload.publicShare && upload.file) {
+        publicApi.abortTusUpload(upload.publicShare.hash, upload.name, upload.file);
+      }
+    }
     tus.abortAllUploads();
   };
 
@@ -123,9 +130,10 @@ export const useUploadStore = defineStore("upload", () => {
           upload.rawProgress.sentBytes = event.loaded;
         };
 
-        await api
-          .post(upload.path, upload.file!, upload.overwrite, onUpload)
-          .catch((err) => {
+        const request = upload.publicShare
+          ? publicApi.tusUpload(upload.publicShare.hash, upload.name, upload.file!, upload.publicShare.token, upload.publicShare.password, onUpload)
+          : api.post(upload.path, upload.file!, upload.overwrite, onUpload);
+        await request.catch((err) => {
             succeeded = false;
             if (err.message !== "Upload aborted") $showError(err);
           });

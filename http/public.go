@@ -37,6 +37,12 @@ var withHashFile = func(fn handleFunc) handleFunc {
 				return http.StatusForbidden, nil
 			}
 		}
+		if isPublicUploadTempPath(ifPath) {
+			// In-progress resumable data is never a public resource. It is kept
+			// under a reserved temporary name and only atomically published after
+			// the final PATCH succeeds.
+			return http.StatusNotFound, nil
+		}
 
 		user, err := d.store.Users.Get(d.server.Root, d.server.FollowExternalSymlinks, link.UserID)
 		if err != nil {
@@ -105,6 +111,16 @@ var withHashFile = func(fn handleFunc) handleFunc {
 		}
 
 		if file.IsDir {
+			// Do not leak resumable-upload temporary files from regular readable
+			// shares while an upload is still in progress.
+			items := file.Items[:0]
+			for _, item := range file.Items {
+				if !strings.HasPrefix(item.Name, ".filebrowser-upload-") {
+					items = append(items, item)
+				}
+			}
+			file.Items = items
+			file.NumFiles = len(items)
 			// extract name from the last directory in the path
 			name := filepath.Base(strings.TrimRight(link.Path, string(filepath.Separator)))
 			file.Name = name
@@ -114,6 +130,15 @@ var withHashFile = func(fn handleFunc) handleFunc {
 		d.rawShare = link
 		return fn(w, r, d)
 	}
+}
+
+func isPublicUploadTempPath(filePath string) bool {
+	for _, segment := range strings.Split(filePath, "/") {
+		if strings.HasPrefix(segment, ".filebrowser-upload-") {
+			return true
+		}
+	}
+	return false
 }
 
 // ref to https://github.com/filebrowser/filebrowser/pull/727
@@ -334,6 +359,14 @@ func visitorSessionFolderInfo(d *data, root *files.FileInfo, folder string) (*fi
 	if !info.IsDir {
 		return nil, errors.New("visitor session path is not a directory")
 	}
+	items := info.Items[:0]
+	for _, item := range info.Items {
+		if !strings.HasPrefix(item.Name, ".filebrowser-upload-") {
+			items = append(items, item)
+		}
+	}
+	info.Items = items
+	info.NumFiles = len(items)
 	info.Name = root.Name
 	info.Sorting = files.Sorting{By: "name", Asc: false}
 	info.ApplySort()
