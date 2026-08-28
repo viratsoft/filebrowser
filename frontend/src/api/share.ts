@@ -23,6 +23,7 @@ export async function create(
   allowUpload = false,
   uploadOnly = false,
   sessionUploadFolder = false,
+  matchFolderOwner = false,
   name = ""
 ) {
   url = removePrefix(url);
@@ -31,7 +32,7 @@ export async function create(
     url += `?expires=${expires}&unit=${unit}`;
   }
   let body = "{}";
-  if (password != "" || expires !== "" || unit !== "hours" || allowUpload || uploadOnly || sessionUploadFolder || name) {
+  if (password != "" || expires !== "" || unit !== "hours" || allowUpload || uploadOnly || sessionUploadFolder || matchFolderOwner || name) {
     body = JSON.stringify({
       password: password,
       expires: expires.toString(), // backend expects string not number
@@ -39,6 +40,7 @@ export async function create(
       allowUpload,
       uploadOnly,
       sessionUploadFolder,
+      matchFolderOwner,
       name,
     });
   }

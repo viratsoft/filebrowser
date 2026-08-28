@@ -32,6 +32,7 @@ type shareResponse struct {
 	AllowUpload         bool   `json:"allowUpload"`
 	UploadOnly          bool   `json:"uploadOnly"`
 	SessionUploadFolder bool   `json:"sessionUploadFolder"`
+	MatchFolderOwner    bool   `json:"matchFolderOwner"`
 	Name                string `json:"name"`
 }
 
@@ -45,6 +46,7 @@ func toShareResponse(l *share.Link) *shareResponse {
 		AllowUpload:         l.AllowUpload,
 		UploadOnly:          l.UploadOnly,
 		SessionUploadFolder: l.SessionUploadFolder,
+		MatchFolderOwner:    l.MatchFolderOwner,
 		Name:                l.Name,
 	}
 }
@@ -193,6 +195,12 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 	if body.SessionUploadFolder && !body.UploadOnly {
 		return http.StatusBadRequest, errors.New("session upload folders require an upload-only share")
 	}
+	if body.MatchFolderOwner && !body.AllowUpload {
+		return http.StatusBadRequest, errors.New("matching the folder owner requires uploads to be enabled")
+	}
+	if body.MatchFolderOwner && !canMatchPublicUploadOwner() {
+		return http.StatusBadRequest, errors.New("matching the folder owner requires FileBrowser to run as root on a supported Unix system")
+	}
 	body.Name = strings.TrimSpace(body.Name)
 	if body.AllowUpload && !d.user.Perm.Create {
 		return http.StatusForbidden, nil
@@ -253,6 +261,7 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		AllowUpload:         body.AllowUpload,
 		UploadOnly:          body.UploadOnly,
 		SessionUploadFolder: body.SessionUploadFolder,
+		MatchFolderOwner:    body.MatchFolderOwner,
 		Name:                body.Name,
 	}
 

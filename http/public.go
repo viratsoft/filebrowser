@@ -213,6 +213,17 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	if !root.IsDir {
 		return http.StatusBadRequest, nil
 	}
+	var folderOwner publicUploadOwner
+	if link.MatchFolderOwner {
+		rootInfo, err := d.user.Fs.Stat(link.Path)
+		if err != nil {
+			return errToStatus(err), err
+		}
+		folderOwner, err = publicUploadOwnerFor(rootInfo)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+	}
 
 	basePath := slashClean(link.Path)
 	d.user.Fs = files.NewFs(d.user.Fs, basePath, d.server.FollowExternalSymlinks)
@@ -239,10 +250,18 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 			if folderErr != nil {
 				return folderErr
 			}
+			if link.MatchFolderOwner {
+				if folderErr = applyPublicUploadOwner(d.user.Fs, "/"+session.Folder, folderOwner); folderErr != nil {
+					return folderErr
+				}
+			}
 		}
 		var writeErr error
 		created, writeErr = writeNewPublicUpload(d.user.Fs, targetPath, r.Body, d.settings.FileMode)
-		return writeErr
+		if writeErr != nil || !link.MatchFolderOwner {
+			return writeErr
+		}
+		return applyPublicUploadOwner(d.user.Fs, targetPath, folderOwner)
 	}, "upload", targetPath, "", d.user)
 	if err != nil && created {
 		_ = d.user.Fs.RemoveAll(targetPath)

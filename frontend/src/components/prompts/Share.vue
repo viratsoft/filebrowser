@@ -131,6 +131,11 @@
           {{ $t("prompts.sessionUploadFolder") }}
         </label>
         <p v-if="isDirectory && uploadOnly" class="share-hint">{{ $t("prompts.sessionUploadFolderHint") }}</p>
+        <label v-if="isDirectory && allowUpload" class="checkbox share-owner-option">
+          <input type="checkbox" v-model="matchFolderOwner" />
+          {{ $t("prompts.matchFolderOwner") }}
+        </label>
+        <p v-if="isDirectory && allowUpload" class="share-hint">{{ $t("prompts.matchFolderOwnerHint") }}</p>
       </div>
 
       <div class="card-action">
@@ -178,6 +183,7 @@ export default {
       allowUpload: false,
       uploadOnly: false,
       sessionUploadFolder: false,
+      matchFolderOwner: false,
       name: "",
       listing: true,
     };
@@ -212,6 +218,7 @@ export default {
       if (!enabled) {
         this.uploadOnly = false;
         this.sessionUploadFolder = false;
+        this.matchFolderOwner = false;
       }
     },
     uploadOnly(enabled) {
@@ -267,6 +274,7 @@ export default {
             this.allowUpload,
             this.uploadOnly,
             this.sessionUploadFolder,
+            this.matchFolderOwner,
             this.name
           );
         } else {
@@ -278,6 +286,7 @@ export default {
             this.allowUpload,
             this.uploadOnly,
             this.sessionUploadFolder,
+            this.matchFolderOwner,
             this.name
           );
         }
@@ -291,6 +300,7 @@ export default {
         this.allowUpload = false;
         this.uploadOnly = false;
         this.sessionUploadFolder = false;
+        this.matchFolderOwner = false;
         this.name = "";
 
         this.listing = true;
@@ -351,6 +361,7 @@ export default {
 }
 .share-upload-only-option { display: block; margin-top: 1rem; }
 .share-session-folder-option { display: block; margin-top: 1rem; }
+.share-owner-option { display: block; margin-top: 1rem; }
 .share-hint { color: var(--text-secondary, #777); font-size: .85rem; margin: .35rem 0 0 2rem; }
 .share-field-label { margin-top: 1.25rem; }
 </style>

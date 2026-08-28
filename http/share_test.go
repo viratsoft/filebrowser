@@ -168,6 +168,21 @@ func TestSharePostHandlerValidatesSessionUploadFolders(t *testing.T) {
 	if rec := request(`{"allowUpload":true,"sessionUploadFolder":true}`); rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected session folder without upload-only to be rejected, got %d: %s", rec.Code, rec.Body.String())
 	}
+	if rec := request(`{"matchFolderOwner":true}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected owner matching without uploads to be rejected, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	ownerMatch := request(`{"allowUpload":true,"matchFolderOwner":true}`)
+	expectedStatus := http.StatusBadRequest
+	if canMatchPublicUploadOwner() {
+		expectedStatus = http.StatusOK
+	}
+	if ownerMatch.Code != expectedStatus {
+		t.Fatalf("expected owner-matching share status %d, got %d: %s", expectedStatus, ownerMatch.Code, ownerMatch.Body.String())
+	}
+	if expectedStatus == http.StatusOK && !strings.Contains(ownerMatch.Body.String(), `"matchFolderOwner":true`) {
+		t.Fatalf("expected owner-matching setting in response, got %s", ownerMatch.Body.String())
+	}
 }
 
 func signShareTestToken(t *testing.T, id uint, username string, perm users.Permissions, key []byte) string {

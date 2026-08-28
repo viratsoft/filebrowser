@@ -7,6 +7,7 @@ type CreateBody struct {
 	AllowUpload         bool   `json:"allowUpload"`
 	UploadOnly          bool   `json:"uploadOnly"`
 	SessionUploadFolder bool   `json:"sessionUploadFolder"`
+	MatchFolderOwner    bool   `json:"matchFolderOwner"`
 	Name                string `json:"name"`
 }
 
@@ -23,6 +24,10 @@ type Link struct {
 	// SessionUploadFolder puts each upload-only visitor session into an isolated,
 	// server-generated subdirectory below the shared folder.
 	SessionUploadFolder bool   `json:"sessionUploadFolder"`
+	// MatchFolderOwner makes new public uploads inherit the shared folder's
+	// owner and group. The identifiers are always read from the server's
+	// filesystem; callers can never choose an account to chown to.
+	MatchFolderOwner bool   `json:"matchFolderOwner"`
 	Name                string `json:"name"`
 	PasswordHash        string `json:"password_hash,omitempty"`
 	// Token is a random value that will only be set when PasswordHash is set. It is

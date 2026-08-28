@@ -173,6 +173,8 @@
     "uploadOnlyNotice": "This link accepts uploads only. Downloading, viewing, renaming, and deleting files are disabled.",
     "sessionUploadFolder": "Create a separate folder for each visitor session",
     "sessionUploadFolderHint": "Uploads from the same browser stay together for 24 hours in a server-generated timestamped folder.",
+    "matchFolderOwner": "Use this folder's owner for uploaded files",
+    "matchFolderOwnerHint": "New files and visitor folders use this folder's owner and group. Requires FileBrowser to run as root on Linux.",
     "shareName": "Share name",
     "shareNameHint": "Optional — visible only in your share list",
     "resolution": "Resolution",
