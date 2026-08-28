@@ -189,6 +189,57 @@ func TestPublicUploadHandler(t *testing.T) {
 	}
 }
 
+func TestUploadOnlyShareLimitsVisitorsToTheirOwnUploads(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shared, "existing.txt"), []byte("private"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true, Create: true}, []byte("test-signing-key"))
+	if err := st.Share.Save(&share.Link{Hash: "upload-only", UserID: 1, Path: "/shared", AllowUpload: true, UploadOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	shareHandler := handle(publicShareHandler, "/api/public/share/", st, &settings.Server{})
+	uploadHandler := handle(publicUploadHandler, "/api/public/upload/", st, &settings.Server{})
+	downloadHandler := handle(publicDlHandler, "/api/public/dl/", st, &settings.Server{})
+	request := func(handler http.Handler, method, path, body string, cookies []*http.Cookie) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		for _, cookie := range cookies {
+			req.AddCookie(cookie)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	listing := request(shareHandler, http.MethodGet, "/api/public/share/upload-only/", "", nil)
+	if listing.Code != http.StatusOK || strings.Contains(listing.Body.String(), "existing.txt") {
+		t.Fatalf("existing files must be hidden, got %d: %s", listing.Code, listing.Body.String())
+	}
+	cookies := listing.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected an upload-only visitor session cookie")
+	}
+
+	if rec := request(downloadHandler, http.MethodGet, "/api/public/dl/upload-only/existing.txt", "", cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected existing file download to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := request(uploadHandler, http.MethodPost, "/api/public/upload/upload-only/new.txt", "guest upload", cookies); rec.Code != http.StatusOK {
+		t.Fatalf("expected upload success, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := request(downloadHandler, http.MethodGet, "/api/public/dl/upload-only/new.txt", "", cookies); rec.Code != http.StatusOK {
+		t.Fatalf("expected visitor's uploaded file to be accessible, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := request(downloadHandler, http.MethodGet, "/api/public/dl/upload-only/new.txt", "", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected another visitor to be denied, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestPublicShareHandlerRules ensures that owner rules keep applying to paths
 // below a shared directory, even though the share rebases the filesystem onto
 // that directory. A deny rule relative to the owner's scope must not be
