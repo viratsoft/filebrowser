@@ -10,12 +10,16 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/filebrowser/filebrowser/v2/files"
+	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/share"
 	"github.com/spf13/afero"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var publicUploadSessionKeyMu sync.Mutex
 
 var withHashFile = func(fn handleFunc) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
@@ -144,7 +148,11 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 			// intermediary cache to replay one visitor's listing to another.
 			w.Header().Set("Cache-Control", "private, no-store")
 			w.Header().Set("Vary", "Cookie")
-			session, err := publicUploadSessions.session(w, r, d.rawShare.Hash, d.settings.Key, d.rawShare.SessionUploadFolder)
+			sessionKey, err := publicUploadSessionKey(d)
+			if err != nil {
+				return http.StatusInternalServerError, err
+			}
+			session, err := publicUploadSessions.session(w, r, d.rawShare.Hash, sessionKey, d.rawShare.SessionUploadFolder)
 			if err != nil {
 				return uploadSessionErrorStatus(err), err
 			}
@@ -192,7 +200,11 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	if status, err := authenticateShareRequest(r, link); status != 0 || err != nil {
 		return status, err
 	}
-	session, err := publicUploadSessions.session(w, r, link.Hash, d.settings.Key, link.SessionUploadFolder)
+	sessionKey, err := publicUploadSessionKey(d)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	session, err := publicUploadSessions.session(w, r, link.Hash, sessionKey, link.SessionUploadFolder)
 	if err != nil {
 		return uploadSessionErrorStatus(err), err
 	}
@@ -282,6 +294,38 @@ func uploadSessionErrorStatus(err error) int {
 		return http.StatusServiceUnavailable
 	}
 	return http.StatusInternalServerError
+}
+
+// publicUploadSessionKey returns the application signing key used to bind an
+// upload-only visitor session to its share. Older FileBrowser databases can
+// predate this key; generate and persist it once instead of making those
+// existing databases fail with a generic 500 error.
+func publicUploadSessionKey(d *data) ([]byte, error) {
+	if len(d.settings.Key) != 0 {
+		return d.settings.Key, nil
+	}
+
+	publicUploadSessionKeyMu.Lock()
+	defer publicUploadSessionKeyMu.Unlock()
+	stored, err := d.store.Settings.Get()
+	if err != nil {
+		return nil, err
+	}
+	if len(stored.Key) != 0 {
+		d.settings = stored
+		return stored.Key, nil
+	}
+
+	key, err := settings.GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+	stored.Key = key
+	if err := d.store.Settings.Save(stored); err != nil {
+		return nil, err
+	}
+	d.settings = stored
+	return key, nil
 }
 
 func createVisitorSessionFolder(afs afero.Fs, folder string, mode os.FileMode) (bool, error) {

@@ -41,6 +41,15 @@
       hidden
       @change="uploadFiles"
     />
+    <div v-if="uploading" class="public-upload-progress" role="status" aria-live="polite">
+      <div>
+        <strong>{{ t("prompts.uploadingFiles") }}</strong>
+        <span>{{ uploadingFileName }} · {{ uploadProgress }}%</span>
+      </div>
+      <div class="public-upload-progress__track">
+        <div class="public-upload-progress__bar" :style="{ width: `${uploadProgress}%` }" />
+      </div>
+    </div>
 
     <div v-if="layoutStore.loading">
       <h2 class="message delayed" style="padding-top: 3em !important">
@@ -364,6 +373,9 @@ const token = ref<string>("");
 const audio = ref<HTMLAudioElement>();
 const tag = ref<boolean>(false);
 const uploadInput = ref<HTMLInputElement>();
+const uploading = ref(false);
+const uploadingFileName = ref("");
+const uploadProgress = ref(0);
 
 const $showError = inject<IToastError>("$showError")!;
 const $showSuccess = inject<IToastSuccess>("$showSuccess")!;
@@ -481,24 +493,54 @@ const toggleMultipleSelection = () => {
 
 const openUpload = () => uploadInput.value?.click();
 
+const uploadPublicFile = (url: URL, file: File): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", url.toString());
+    request.withCredentials = true;
+    if (!token.value && password.value) {
+      request.setRequestHeader("X-SHARE-PASSWORD", encodeURIComponent(password.value));
+    }
+    request.upload.onprogress = (progress) => {
+      if (progress.lengthComputable) {
+        uploadProgress.value = Math.min(100, Math.round((progress.loaded / progress.total) * 100));
+      }
+    };
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        uploadProgress.value = 100;
+        resolve();
+        return;
+      }
+      reject(new Error(request.responseText || `${request.status} ${request.statusText}`));
+    };
+    request.onerror = () => reject(new Error(t("prompts.publicUploadNetworkError")));
+    request.send(file);
+  });
+
 const uploadFiles = async (event: Event) => {
   const selectedFiles = (event.target as HTMLInputElement).files;
   if (!selectedFiles || !hash.value) return;
 
   try {
     for (const file of Array.from(selectedFiles)) {
+      uploading.value = true;
+      uploadingFileName.value = file.name;
+      uploadProgress.value = 0;
       const uploadURL = new URL(
         `${baseURL}/api/public/upload/${encodeURIComponent(hash.value)}/${encodeURIComponent(file.name)}`,
         window.location.origin
       );
       if (token.value) uploadURL.searchParams.set("token", token.value);
-      const response = await fetch(uploadURL, { method: "POST", body: file });
-      if (!response.ok) throw new Error(await response.text());
+      await uploadPublicFile(uploadURL, file);
     }
     await fetchData();
   } catch (err) {
     $showError(err instanceof Error ? err : String(err));
   } finally {
+    uploading.value = false;
+    uploadingFileName.value = "";
+    uploadProgress.value = 0;
     (event.target as HTMLInputElement).value = "";
   }
 };
@@ -592,6 +634,34 @@ onBeforeUnmount(() => {
 
 #shareList {
   overflow-y: scroll;
+}
+
+.public-upload-progress {
+  background: var(--surface-secondary, #f4f6f8);
+  border-radius: .4rem;
+  margin: 1rem auto 0;
+  max-width: 42rem;
+  padding: .8rem 1rem;
+}
+
+.public-upload-progress > div:first-child {
+  display: flex;
+  gap: .75rem;
+  justify-content: space-between;
+}
+
+.public-upload-progress__track {
+  background: #d9dee3;
+  border-radius: 999px;
+  height: .45rem;
+  margin-top: .55rem;
+  overflow: hidden;
+}
+
+.public-upload-progress__bar {
+  background: var(--blue, #2196f3);
+  height: 100%;
+  transition: width .15s ease;
 }
 
 @media (min-width: 930px) {

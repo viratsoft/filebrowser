@@ -17,6 +17,7 @@ import (
 	"github.com/filebrowser/filebrowser/v2/storage/bolt"
 	"github.com/filebrowser/filebrowser/v2/users"
 	"github.com/spf13/afero"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestPublicShareHandlerAuthentication(t *testing.T) {
@@ -370,6 +371,60 @@ func TestUploadOnlySessionFolderPersistsAndSeparatesVisitors(t *testing.T) {
 	entries, err = os.ReadDir(shared)
 	if err != nil || len(entries) != 3 {
 		t.Fatalf("expected two isolated visitor folders, entries=%v err=%v", entries, err)
+	}
+}
+
+// Older official databases may not contain Settings.Key. A password-protected
+// session-folder share must initialize that key safely instead of returning a
+// generic 500 after the visitor enters the correct password.
+func TestPasswordProtectedSessionFolderInitializesMissingSettingsKey(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	perm := users.Permissions{Share: true, Download: true, Create: true}
+	st := scopedUserStorage(t, root, perm, nil)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("correct password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Share.Save(&share.Link{
+		Hash:                "password-session-folder",
+		UserID:              1,
+		Path:                "/shared",
+		AllowUpload:         true,
+		UploadOnly:          true,
+		SessionUploadFolder: true,
+		PasswordHash:        string(passwordHash),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	shareHandler := handle(publicShareHandler, "/api/public/share/", st, &settings.Server{})
+	listing := httptest.NewRequest(http.MethodGet, "/api/public/share/password-session-folder/", nil)
+	listing.Header.Set("X-SHARE-PASSWORD", "correct%20password")
+	listingRec := httptest.NewRecorder()
+	shareHandler.ServeHTTP(listingRec, listing)
+	if listingRec.Code != http.StatusOK {
+		t.Fatalf("expected password-protected session folder listing to succeed, got %d: %s", listingRec.Code, listingRec.Body.String())
+	}
+	stored, err := st.Settings.Get()
+	if err != nil || len(stored.Key) == 0 {
+		t.Fatalf("expected a persisted session signing key, settings=%#v err=%v", stored, err)
+	}
+
+	uploadHandler := handle(publicUploadHandler, "/api/public/upload/", st, &settings.Server{})
+	upload := httptest.NewRequest(http.MethodPost, "/api/public/upload/password-session-folder/guest.txt", strings.NewReader("guest upload"))
+	upload.Header.Set("X-SHARE-PASSWORD", "correct%20password")
+	for _, cookie := range listingRec.Result().Cookies() {
+		upload.AddCookie(cookie)
+	}
+	uploadRec := httptest.NewRecorder()
+	uploadHandler.ServeHTTP(uploadRec, upload)
+	if uploadRec.Code != http.StatusOK {
+		t.Fatalf("expected password-protected session folder upload to succeed, got %d: %s", uploadRec.Code, uploadRec.Body.String())
 	}
 }
 

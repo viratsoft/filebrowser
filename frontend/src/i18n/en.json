@@ -176,6 +176,7 @@
     "matchFolderOwner": "Use this folder's owner for uploaded files",
     "matchFolderOwnerHint": "New files and visitor folders use this folder's owner and group. Requires FileBrowser to run as root on Linux.",
     "matchFolderOwnerUnavailableHint": "Unavailable because FileBrowser is not running as root on Linux.",
+    "publicUploadNetworkError": "Upload failed. Check your connection and try again.",
     "shareName": "Share name",
     "shareNameHint": "Optional — visible only in your share list",
     "resolution": "Resolution",
