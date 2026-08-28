@@ -1,6 +1,8 @@
 package fbhttp
 
 import (
+	"crypto/tls"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -73,5 +75,22 @@ func TestCreateVisitorSessionFolderIsIdempotent(t *testing.T) {
 	created, err = createVisitorSessionFolder(fs, "upload_2026-08-29_09-42-18_PM_random", 0o755)
 	if err != nil || created {
 		t.Fatalf("expected existing visitor folder to be reused, created=%v err=%v", created, err)
+	}
+}
+
+func TestRequestUsesHTTPS(t *testing.T) {
+	plain := httptest.NewRequest("GET", "http://example.test", nil)
+	if requestUsesHTTPS(plain) {
+		t.Fatal("plain request must not set a Secure cookie")
+	}
+	tlsRequest := httptest.NewRequest("GET", "https://example.test", nil)
+	tlsRequest.TLS = &tls.ConnectionState{}
+	if !requestUsesHTTPS(tlsRequest) {
+		t.Fatal("TLS request must set a Secure cookie")
+	}
+	proxied := httptest.NewRequest("GET", "http://example.test", nil)
+	proxied.Header.Set("X-Forwarded-Proto", "https, http")
+	if !requestUsesHTTPS(proxied) {
+		t.Fatal("HTTPS proxy request must set a Secure cookie")
 	}
 }

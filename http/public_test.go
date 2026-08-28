@@ -189,6 +189,23 @@ func TestPublicUploadHandler(t *testing.T) {
 	}
 }
 
+func TestUploadOnlyFileShareIsRejected(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("private"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true, Create: true}, []byte("test-signing-key"))
+	if err := st.Share.Save(&share.Link{Hash: "invalid-upload-only", UserID: 1, Path: "/file.txt", AllowUpload: true, UploadOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	handle(publicShareHandler, "/api/public/share/", st, &settings.Server{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/public/share/invalid-upload-only", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected malformed upload-only file share to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestUploadOnlyShareLimitsVisitorsToTheirOwnUploads(t *testing.T) {
 	root := t.TempDir()
 	shared := filepath.Join(root, "shared")
@@ -220,6 +237,9 @@ func TestUploadOnlyShareLimitsVisitorsToTheirOwnUploads(t *testing.T) {
 	listing := request(shareHandler, http.MethodGet, "/api/public/share/upload-only/", "", nil)
 	if listing.Code != http.StatusOK || strings.Contains(listing.Body.String(), "existing.txt") {
 		t.Fatalf("existing files must be hidden, got %d: %s", listing.Code, listing.Body.String())
+	}
+	if listing.Header().Get("Cache-Control") != "private, no-store" || listing.Header().Get("Vary") != "Cookie" {
+		t.Fatalf("upload-only listing must not be shared through caches: headers=%v", listing.Header())
 	}
 	cookies := listing.Result().Cookies()
 	if len(cookies) == 0 {

@@ -62,6 +62,11 @@ var withHashFile = func(fn handleFunc) handleFunc {
 		if err != nil {
 			return errToStatus(err), err
 		}
+		if link.UploadOnly && !file.IsDir {
+			// Keep the database invariant enforced at request time as well. This
+			// protects old or manually edited records that predate API validation.
+			return http.StatusForbidden, nil
+		}
 
 		// share base path. Canonicalized because it roots both the rebased
 		// filesystem and checkerPrefix below, and a stored path that is not
@@ -135,6 +140,10 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 		file.Sorting = files.Sorting{By: "name", Asc: false}
 		file.ApplySort()
 		if d.rawShare.UploadOnly {
+			// The response is visitor-session-specific. Never allow a browser or
+			// intermediary cache to replay one visitor's listing to another.
+			w.Header().Set("Cache-Control", "private, no-store")
+			w.Header().Set("Vary", "Cookie")
 			session, err := publicUploadSessions.session(w, r, d.rawShare.Hash, d.settings.Key, d.rawShare.SessionUploadFolder)
 			if err != nil {
 				return uploadSessionErrorStatus(err), err

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -77,10 +78,19 @@ func (s *uploadSessionStore) session(w http.ResponseWriter, r *http.Request, has
 		Value:    cookie,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   requestUsesHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(uploadSessionTTL.Seconds()),
 	})
 	return session, nil
+}
+
+func requestUsesHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	forwardedProto := strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]
+	return strings.EqualFold(strings.TrimSpace(forwardedProto), "https")
 }
 
 func randomUploadSessionID() (string, error) {
