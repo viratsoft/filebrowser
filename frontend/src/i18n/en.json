@@ -170,6 +170,7 @@
     "allowUploadHint": "Anyone with the link can add new files.",
     "uploadOnly": "Hide existing files from visitors",
     "uploadOnlyHint": "Visitors can see only files uploaded in their current browser session.",
+    "uploadOnlyNotice": "This link accepts uploads only. Downloading, viewing, renaming, and deleting files are disabled.",
     "shareName": "Share name",
     "shareNameHint": "Optional — visible only in your share list",
     "resolution": "Resolution",

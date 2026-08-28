@@ -4,14 +4,14 @@
       <title />
 
       <action
-        v-if="fileStore.selectedCount"
+        v-if="fileStore.selectedCount && !isUploadOnly"
         icon="file_download"
         :label="t('buttons.download')"
         @action="download"
         :counter="fileStore.selectedCount"
       />
       <button
-        v-if="isSingleFile()"
+        v-if="isSingleFile() && !isUploadOnly"
         class="action copy-clipboard"
         :aria-label="t('buttons.copyDownloadLinkToClipboard')"
         :data-title="t('buttons.copyDownloadLinkToClipboard')"
@@ -26,6 +26,7 @@
         @action="openUpload"
       />
       <action
+        v-if="!isUploadOnly"
         icon="check_circle"
         :label="t('buttons.selectMultiple')"
         @action="toggleMultipleSelection"
@@ -89,6 +90,7 @@
     <div v-else-if="req !== null">
       <div class="share">
         <div
+          v-if="!isUploadOnly"
           class="share__box share__box__info"
           style="
             position: -webkit-sticky;
@@ -249,6 +251,12 @@
             <i v-else class="material-icons">call_to_action</i>
           </div>
         </div>
+        <div v-else class="share__box share__box__info upload-only-info">
+          <div class="share__box__header">{{ t("buttons.upload") }}</div>
+          <div class="share__box__element">
+            {{ t("prompts.uploadOnlyNotice") }}
+          </div>
+        </div>
         <div
           id="shareList"
           v-if="req.isDir && req.items.length > 0"
@@ -257,7 +265,7 @@
           <div class="share__box__header" v-if="req.isDir">
             {{ t("files.files") }}
           </div>
-          <div id="listing" class="list file-icons">
+          <div v-if="!isUploadOnly" id="listing" class="list file-icons">
             <item
               v-for="item in req.items.slice(0, showLimit)"
               :key="base64(item.name)"
@@ -296,6 +304,19 @@
               >
                 <i class="material-icons">clear</i>
               </div>
+            </div>
+          </div>
+          <div v-else id="listing" class="list file-icons upload-only-list">
+            <div v-for="item in req.items.slice(0, showLimit)" :key="base64(item.name)" class="item upload-only-item">
+              <div><i class="material-icons">insert_drive_file</i></div>
+              <div>
+                <p class="name">{{ item.name }}</p>
+                <p class="size">{{ filesize(item.size) }}</p>
+                <p class="modified"><time :datetime="item.modified">{{ dayjs(item.modified).fromNow() }}</time></p>
+              </div>
+            </div>
+            <div v-if="req.items.length > showLimit" class="item" @click="showLimit += 100">
+              <div><p class="name">+ {{ req.items.length - showLimit }}</p></div>
             </div>
           </div>
         </div>
@@ -359,6 +380,7 @@ watch(route, () => {
 });
 
 const req = computed(() => fileStore.req);
+const isUploadOnly = computed(() => Boolean(req.value?.uploadOnly));
 
 // Define computes
 

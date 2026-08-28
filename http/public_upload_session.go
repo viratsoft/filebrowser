@@ -46,20 +46,19 @@ func (s *uploadSessionStore) session(w http.ResponseWriter, r *http.Request, has
 func (s *uploadSessionStore) add(hash, id, file string) {
 	s.Lock()
 	defer s.Unlock()
-	if session := s.sessions[hash+":"+id]; session != nil && time.Now().Before(session.expires) { session.files[file] = struct{}{} }
-}
-
-func (s *uploadSessionStore) allows(hash, id, file string) bool {
-	s.Lock()
-	defer s.Unlock()
-	if session := s.sessions[hash+":"+id]; session != nil && time.Now().Before(session.expires) { _, ok := session.files[file]; return ok }
-	return false
+	if session := s.sessions[hash+":"+id]; session != nil && time.Now().Before(session.expires) {
+		session.files[file] = struct{}{}
+	}
 }
 
 func (s *uploadSessionStore) files(hash, id string) map[string]struct{} {
 	s.Lock()
 	defer s.Unlock()
 	result := map[string]struct{}{}
-	if session := s.sessions[hash+":"+id]; session != nil && time.Now().Before(session.expires) { for name := range session.files { result[name] = struct{}{} } }
+	if session := s.sessions[hash+":"+id]; session != nil && time.Now().Before(session.expires) {
+		for name := range session.files {
+			result[name] = struct{}{}
+		}
+	}
 	return result
 }

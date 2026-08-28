@@ -229,14 +229,37 @@ func TestUploadOnlyShareLimitsVisitorsToTheirOwnUploads(t *testing.T) {
 	if rec := request(downloadHandler, http.MethodGet, "/api/public/dl/upload-only/existing.txt", "", cookies); rec.Code != http.StatusForbidden {
 		t.Fatalf("expected existing file download to be forbidden, got %d: %s", rec.Code, rec.Body.String())
 	}
+	if rec := request(downloadHandler, http.MethodGet, "/api/public/dl/upload-only/", "", cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected archive download to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
 	if rec := request(uploadHandler, http.MethodPost, "/api/public/upload/upload-only/new.txt", "guest upload", cookies); rec.Code != http.StatusOK {
 		t.Fatalf("expected upload success, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := request(downloadHandler, http.MethodGet, "/api/public/dl/upload-only/new.txt", "", cookies); rec.Code != http.StatusOK {
-		t.Fatalf("expected visitor's uploaded file to be accessible, got %d: %s", rec.Code, rec.Body.String())
+	if rec := request(shareHandler, http.MethodGet, "/api/public/share/upload-only/new.txt", "", cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected uploaded file metadata to be forbidden, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := request(downloadHandler, http.MethodGet, "/api/public/dl/upload-only/new.txt", "", nil); rec.Code != http.StatusForbidden {
-		t.Fatalf("expected another visitor to be denied, got %d: %s", rec.Code, rec.Body.String())
+	if rec := request(downloadHandler, http.MethodGet, "/api/public/dl/upload-only/new.txt", "", cookies); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected uploaded file download to be forbidden, got %d: %s", rec.Code, rec.Body.String())
+	}
+	listing = request(shareHandler, http.MethodGet, "/api/public/share/upload-only/", "", cookies)
+	if listing.Code != http.StatusOK || !strings.Contains(listing.Body.String(), "new.txt") || strings.Contains(listing.Body.String(), "existing.txt") {
+		t.Fatalf("expected only the visitor's uploaded file in the listing, got %d: %s", listing.Code, listing.Body.String())
+	}
+}
+
+func TestWriteNewPublicUploadNeverOverwrites(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	if err := afero.WriteFile(fs, "/existing.txt", []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	created, err := writeNewPublicUpload(fs, "/existing.txt", strings.NewReader("replacement"), 0o644)
+	if created || !os.IsExist(err) {
+		t.Fatalf("expected exclusive create to reject an existing file, created=%v err=%v", created, err)
+	}
+	contents, err := afero.ReadFile(fs, "/existing.txt")
+	if err != nil || string(contents) != "original" {
+		t.Fatalf("existing file was changed: contents=%q err=%v", contents, err)
 	}
 }
 

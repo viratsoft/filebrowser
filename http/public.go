@@ -3,8 +3,10 @@ package fbhttp
 import (
 	"crypto/subtle"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -27,10 +29,12 @@ var withHashFile = func(fn handleFunc) handleFunc {
 		if status != 0 || err != nil {
 			return status, err
 		}
-		sessionID := ""
 		if link.UploadOnly {
-			sessionID = publicUploadSessions.session(w, r, link.Hash)
-			if ifPath != "/" && !publicUploadSessions.allows(link.Hash, sessionID, strings.TrimPrefix(ifPath, "/")) {
+			// An upload-only share has one readable endpoint: its root listing.
+			// File metadata and content remain unavailable even to the visitor that
+			// uploaded the file, so guessing a filename cannot become a read path.
+			publicUploadSessions.session(w, r, link.Hash)
+			if ifPath != "/" {
 				return http.StatusForbidden, nil
 			}
 		}
@@ -135,7 +139,11 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 			sessionID := publicUploadSessions.session(w, r, d.rawShare.Hash)
 			allowed := publicUploadSessions.files(d.rawShare.Hash, sessionID)
 			items := file.Items[:0]
-			for _, item := range file.Items { if _, ok := allowed[item.Name]; ok { items = append(items, item) } }
+			for _, item := range file.Items {
+				if _, ok := allowed[item.Name]; ok {
+					items = append(items, item)
+				}
+			}
 			file.Items, file.NumFiles, file.NumDirs = items, len(items), 0
 		}
 	}
@@ -143,7 +151,7 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 	return renderJSON(w, r, struct {
 		*files.FileInfo
 		AllowUpload bool `json:"allowUpload"`
-		UploadOnly bool `json:"uploadOnly"`
+		UploadOnly  bool `json:"uploadOnly"`
 	}{FileInfo: file, AllowUpload: d.rawShare.AllowUpload, UploadOnly: d.rawShare.UploadOnly})
 })
 
@@ -197,26 +205,55 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 		return http.StatusConflict, nil
 	}
 
+	created := false
 	err = d.RunHook(func() error {
-		_, writeErr := writeFile(d.user.Fs, relativePath, r.Body, d.settings.FileMode, d.settings.DirMode)
+		var writeErr error
+		created, writeErr = writeNewPublicUpload(d.user.Fs, relativePath, r.Body, d.settings.FileMode)
 		return writeErr
 	}, "upload", relativePath, "", d.user)
-	if err != nil {
+	if err != nil && created {
 		_ = d.user.Fs.RemoveAll(relativePath)
 	}
-	if err == nil { publicUploadSessions.add(link.Hash, sessionID, strings.TrimPrefix(relativePath, "/")) }
+	if err == nil {
+		publicUploadSessions.add(link.Hash, sessionID, strings.TrimPrefix(relativePath, "/"))
+	}
 	return errToStatus(err), err
 }
 
 var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	file := d.raw.(*files.FileInfo)
-	if d.rawShare.UploadOnly && file.IsDir { return http.StatusForbidden, nil }
+	if d.rawShare.UploadOnly {
+		return http.StatusForbidden, nil
+	}
 	if !file.IsDir {
 		return rawFileHandler(w, r, file)
 	}
 
 	return rawDirHandler(w, r, d, file)
 })
+
+// writeNewPublicUpload creates exactly one new file. O_EXCL closes the gap
+// between a pre-flight existence check and the write, so an upload can never
+// overwrite a file created concurrently by the owner or another visitor.
+func writeNewPublicUpload(afs afero.Fs, dst string, body io.Reader, mode os.FileMode) (bool, error) {
+	file, err := afs.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return false, err
+	}
+
+	if _, err := io.Copy(file, body); err != nil {
+		_ = file.Close()
+		return true, err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return true, err
+	}
+	if err := file.Close(); err != nil {
+		return true, err
+	}
+	return true, nil
+}
 
 func authenticateShareRequest(r *http.Request, l *share.Link) (int, error) {
 	if l.PasswordHash == "" {
