@@ -114,7 +114,7 @@
           v-model.trim="password"
           tabindex="3"
         />
-        <label v-if="isDirectory" class="checkbox">
+        <label v-if="isDirectory" class="checkbox share-upload-option">
           <input type="checkbox" v-model="allowUpload" tabindex="4" />
           {{ $t("prompts.allowUpload") }}
         </label>
@@ -307,3 +307,10 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.share-upload-option {
+  display: block;
+  margin-top: 1.25rem;
+}
+</style>
