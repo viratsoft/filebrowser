@@ -17,7 +17,8 @@ export async function fetch(url: string, password: string = "") {
 
   if (data.isDir) {
     if (!data.url.endsWith("/")) data.url += "/";
-    data.items = data.items.map((item: any, index: any) => {
+    // Be tolerant of older servers that serialized an empty directory as null.
+    data.items = (data.items || []).map((item: any, index: any) => {
       item.index = index;
       item.url = `${data.url}${encodeURIComponent(item.name)}`;
 
