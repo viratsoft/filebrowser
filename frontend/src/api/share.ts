@@ -9,6 +9,10 @@ export async function get(url: string) {
   return fetchJSON<Share>(`/api/share${url}`);
 }
 
+export async function capabilities() {
+  return fetchJSON<{ matchFolderOwner: boolean }>("/api/share/capabilities");
+}
+
 export async function remove(hash: string) {
   await fetchURL(`/api/share/${hash}`, {
     method: "DELETE",

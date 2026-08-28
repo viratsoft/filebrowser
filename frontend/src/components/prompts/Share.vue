@@ -131,11 +131,24 @@
           {{ $t("prompts.sessionUploadFolder") }}
         </label>
         <p v-if="isDirectory && uploadOnly" class="share-hint">{{ $t("prompts.sessionUploadFolderHint") }}</p>
-        <label v-if="isDirectory && allowUpload" class="checkbox share-owner-option">
-          <input type="checkbox" v-model="matchFolderOwner" />
+        <label
+          v-if="isDirectory && allowUpload"
+          class="checkbox share-owner-option"
+          :class="{ disabled: !matchFolderOwnerAvailable }"
+        >
+          <input
+            type="checkbox"
+            v-model="matchFolderOwner"
+            :disabled="!matchFolderOwnerAvailable"
+          />
           {{ $t("prompts.matchFolderOwner") }}
         </label>
-        <p v-if="isDirectory && allowUpload" class="share-hint">{{ $t("prompts.matchFolderOwnerHint") }}</p>
+        <p v-if="isDirectory && allowUpload && matchFolderOwnerAvailable" class="share-hint">
+          {{ $t("prompts.matchFolderOwnerHint") }}
+        </p>
+        <p v-if="isDirectory && allowUpload && !matchFolderOwnerAvailable" class="share-hint">
+          {{ $t("prompts.matchFolderOwnerUnavailableHint") }}
+        </p>
       </div>
 
       <div class="card-action">
@@ -184,6 +197,7 @@ export default {
       uploadOnly: false,
       sessionUploadFolder: false,
       matchFolderOwner: false,
+      matchFolderOwnerAvailable: false,
       name: "",
       listing: true,
     };
@@ -227,8 +241,12 @@ export default {
   },
   async beforeMount() {
     try {
-      const links = await api.share.get(this.url);
+      const [links, capabilities] = await Promise.all([
+        api.share.get(this.url),
+        api.share.capabilities(),
+      ]);
       this.links = links;
+      this.matchFolderOwnerAvailable = capabilities.matchFolderOwner;
       this.sort();
 
       if (this.links.length == 0) {
@@ -362,6 +380,7 @@ export default {
 .share-upload-only-option { display: block; margin-top: 1rem; }
 .share-session-folder-option { display: block; margin-top: 1rem; }
 .share-owner-option { display: block; margin-top: 1rem; }
+.share-owner-option.disabled { cursor: not-allowed; opacity: .65; }
 .share-hint { color: var(--text-secondary, #777); font-size: .85rem; margin: .35rem 0 0 2rem; }
 .share-field-label { margin-top: 1.25rem; }
 </style>

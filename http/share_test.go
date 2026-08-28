@@ -185,6 +185,23 @@ func TestSharePostHandlerValidatesSessionUploadFolders(t *testing.T) {
 	}
 }
 
+func TestShareCapabilitiesHandlerReportsFolderOwnerSupport(t *testing.T) {
+	root := t.TempDir()
+	key := []byte("test-signing-key")
+	perm := users.Permissions{Share: true, Download: true}
+	st := scopedUserStorage(t, root, perm, key)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Auth", signToken(t, perm, key))
+	rec := httptest.NewRecorder()
+	handle(shareCapabilitiesHandler, "", st, &settings.Server{Root: root}).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := strings.Contains(rec.Body.String(), `"matchFolderOwner":true`); got != canMatchPublicUploadOwner() {
+		t.Fatalf("unexpected folder-owner capability response: %s", rec.Body.String())
+	}
+}
+
 func signShareTestToken(t *testing.T, id uint, username string, perm users.Permissions, key []byte) string {
 	t.Helper()
 

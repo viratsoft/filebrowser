@@ -118,6 +118,15 @@ var shareGetsHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 	return renderJSON(w, r, toShareResponses(s))
 })
 
+// shareCapabilitiesHandler reports server-side features that affect the share
+// dialog. This is informational only: sharePostHandler still validates every
+// option so a crafted API request cannot bypass a disabled control.
+var shareCapabilitiesHandler = withPermShare(func(w http.ResponseWriter, r *http.Request, _ *data) (int, error) {
+	return renderJSON(w, r, struct {
+		MatchFolderOwner bool `json:"matchFolderOwner"`
+	}{MatchFolderOwner: canMatchPublicUploadOwner()})
+})
+
 func getSharesForAdminPath(d *data, path string) ([]*share.Link, error) {
 	links, err := d.store.Share.All()
 	if err != nil {
