@@ -8,7 +8,7 @@
       <div class="card-content">
         <table>
           <tr>
-            <th>#</th>
+            <th>{{ $t("prompts.shareName") }}</th>
             <th>{{ $t("settings.shareDuration") }}</th>
             <th></th>
             <th></th>
@@ -16,7 +16,7 @@
           </tr>
 
           <tr v-for="link in links" :key="link.hash">
-            <td>{{ link.hash }}</td>
+            <td>{{ link.name || link.hash }}</td>
             <td>
               <template v-if="link.expire !== 0">{{
                 humanTime(link.expire)
@@ -114,10 +114,18 @@
           v-model.trim="password"
           tabindex="3"
         />
+        <p class="share-field-label">{{ $t("prompts.shareName") }}</p>
+        <input class="input input--block" v-model.trim="name" :placeholder="$t('prompts.shareNameHint')" />
         <label v-if="isDirectory" class="checkbox share-upload-option">
           <input type="checkbox" v-model="allowUpload" tabindex="4" />
           {{ $t("prompts.allowUpload") }}
         </label>
+        <p v-if="isDirectory" class="share-hint">{{ $t("prompts.allowUploadHint") }}</p>
+        <label v-if="isDirectory && allowUpload" class="checkbox share-upload-only-option">
+          <input type="checkbox" v-model="uploadOnly" />
+          {{ $t("prompts.uploadOnly") }}
+        </label>
+        <p v-if="isDirectory && allowUpload" class="share-hint">{{ $t("prompts.uploadOnlyHint") }}</p>
       </div>
 
       <div class="card-action">
@@ -163,6 +171,8 @@ export default {
       clip: null,
       password: "",
       allowUpload: false,
+      uploadOnly: false,
+      name: "",
       listing: true,
     };
   },
@@ -237,7 +247,9 @@ export default {
             this.password,
             "",
             "hours",
-            this.allowUpload
+            this.allowUpload,
+            this.uploadOnly,
+            this.name
           );
         } else {
           res = await api.share.create(
@@ -245,7 +257,9 @@ export default {
             this.password,
             this.time,
             this.unit,
-            this.allowUpload
+            this.allowUpload,
+            this.uploadOnly,
+            this.name
           );
         }
 
@@ -256,6 +270,8 @@ export default {
         this.unit = "hours";
         this.password = "";
         this.allowUpload = false;
+        this.uploadOnly = false;
+        this.name = "";
 
         this.listing = true;
       } catch (e) {
@@ -313,4 +329,7 @@ export default {
   display: block;
   margin-top: 1.25rem;
 }
+.share-upload-only-option { display: block; margin-top: 1rem; }
+.share-hint { color: var(--text-secondary, #777); font-size: .85rem; margin: .35rem 0 0 2rem; }
+.share-field-label { margin-top: 1.25rem; }
 </style>

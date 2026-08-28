@@ -26,7 +26,9 @@ interface Share {
   expire?: any;
   userID?: number;
   hasPassword?: boolean;
-  allowUpload?: boolean;
+	allowUpload?: boolean;
+	uploadOnly?: boolean;
+	name?: string;
   username?: string;
 }
 

@@ -10,6 +10,7 @@
         <div class="card-content full" v-if="links.length > 0">
           <table>
             <tr>
+              <th>{{ t("prompts.shareName") }}</th>
               <th>{{ t("settings.path") }}</th>
               <th>{{ t("settings.shareDuration") }}</th>
               <th v-if="authStore.user?.perm.admin">
@@ -20,6 +21,7 @@
             </tr>
 
             <tr v-for="link in links" :key="link.hash">
+              <td>{{ link.name || "—" }}</td>
               <td>
                 <a :href="buildLink(link)" target="_blank">{{ link.path }}</a>
               </td>

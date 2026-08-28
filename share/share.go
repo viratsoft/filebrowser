@@ -5,6 +5,8 @@ type CreateBody struct {
 	Expires     string `json:"expires"`
 	Unit        string `json:"unit"`
 	AllowUpload bool   `json:"allowUpload"`
+	UploadOnly  bool   `json:"uploadOnly"`
+	Name        string `json:"name"`
 }
 
 // Link is the information needed to build a shareable link.
@@ -16,6 +18,8 @@ type Link struct {
 	// AllowUpload permits unauthenticated uploads to a shared directory.
 	// It is opt-in so existing public shares remain read-only.
 	AllowUpload  bool   `json:"allowUpload"`
+	UploadOnly   bool   `json:"uploadOnly"`
+	Name         string `json:"name"`
 	PasswordHash string `json:"password_hash,omitempty"`
 	// Token is a random value that will only be set when PasswordHash is set. It is
 	// URL-Safe and is used to download links in password-protected shares via a

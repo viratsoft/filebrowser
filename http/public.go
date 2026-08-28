@@ -27,6 +27,13 @@ var withHashFile = func(fn handleFunc) handleFunc {
 		if status != 0 || err != nil {
 			return status, err
 		}
+		sessionID := ""
+		if link.UploadOnly {
+			sessionID = publicUploadSessions.session(w, r, link.Hash)
+			if ifPath != "/" && !publicUploadSessions.allows(link.Hash, sessionID, strings.TrimPrefix(ifPath, "/")) {
+				return http.StatusForbidden, nil
+			}
+		}
 
 		user, err := d.store.Users.Get(d.server.Root, d.server.FollowExternalSymlinks, link.UserID)
 		if err != nil {
@@ -124,12 +131,20 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 	if file.IsDir {
 		file.Sorting = files.Sorting{By: "name", Asc: false}
 		file.ApplySort()
+		if d.rawShare.UploadOnly {
+			sessionID := publicUploadSessions.session(w, r, d.rawShare.Hash)
+			allowed := publicUploadSessions.files(d.rawShare.Hash, sessionID)
+			items := file.Items[:0]
+			for _, item := range file.Items { if _, ok := allowed[item.Name]; ok { items = append(items, item) } }
+			file.Items, file.NumFiles, file.NumDirs = items, len(items), 0
+		}
 	}
 
 	return renderJSON(w, r, struct {
 		*files.FileInfo
 		AllowUpload bool `json:"allowUpload"`
-	}{FileInfo: file, AllowUpload: d.rawShare.AllowUpload})
+		UploadOnly bool `json:"uploadOnly"`
+	}{FileInfo: file, AllowUpload: d.rawShare.AllowUpload, UploadOnly: d.rawShare.UploadOnly})
 })
 
 // publicUploadHandler accepts a new file at the root of an upload-enabled
@@ -148,6 +163,7 @@ var publicUploadHandler = func(_ http.ResponseWriter, r *http.Request, d *data) 
 	if !link.AllowUpload {
 		return http.StatusForbidden, nil
 	}
+	sessionID := publicUploadSessions.session(w, r, link.Hash)
 	if status, err := authenticateShareRequest(r, link); status != 0 || err != nil {
 		return status, err
 	}
@@ -188,11 +204,13 @@ var publicUploadHandler = func(_ http.ResponseWriter, r *http.Request, d *data) 
 	if err != nil {
 		_ = d.user.Fs.RemoveAll(relativePath)
 	}
+	if err == nil { publicUploadSessions.add(link.Hash, sessionID, strings.TrimPrefix(relativePath, "/")) }
 	return errToStatus(err), err
 }
 
 var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	file := d.raw.(*files.FileInfo)
+	if d.rawShare.UploadOnly && file.IsDir { return http.StatusForbidden, nil }
 	if !file.IsDir {
 		return rawFileHandler(w, r, file)
 	}

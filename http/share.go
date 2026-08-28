@@ -30,6 +30,8 @@ type shareResponse struct {
 	Expire      int64  `json:"expire"`
 	HasPassword bool   `json:"hasPassword"`
 	AllowUpload bool   `json:"allowUpload"`
+	UploadOnly  bool   `json:"uploadOnly"`
+	Name        string `json:"name"`
 }
 
 func toShareResponse(l *share.Link) *shareResponse {
@@ -40,6 +42,8 @@ func toShareResponse(l *share.Link) *shareResponse {
 		Expire:      l.Expire,
 		HasPassword: l.PasswordHash != "",
 		AllowUpload: l.AllowUpload,
+		UploadOnly:  l.UploadOnly,
+		Name:        l.Name,
 	}
 }
 
@@ -181,6 +185,10 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 	if body.AllowUpload && !info.IsDir() {
 		return http.StatusBadRequest, errors.New("uploads can only be enabled for shared folders")
 	}
+	if body.UploadOnly && !body.AllowUpload {
+		return http.StatusBadRequest, errors.New("upload-only shares must allow uploads")
+	}
+	body.Name = strings.TrimSpace(body.Name)
 	if body.AllowUpload && !d.user.Perm.Create {
 		return http.StatusForbidden, nil
 	}
@@ -238,6 +246,8 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		PasswordHash: string(hash),
 		Token:        token,
 		AllowUpload:  body.AllowUpload,
+		UploadOnly:   body.UploadOnly,
+		Name:         body.Name,
 	}
 
 	if err := d.store.Share.Save(s); err != nil {
