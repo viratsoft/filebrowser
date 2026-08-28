@@ -14,6 +14,9 @@ import (
 )
 
 const uploadSessionTTL = 24 * time.Hour
+const maxTrackedPublicUploadSessions = 10000
+
+var errTooManyPublicUploadSessions = errors.New("too many active public upload sessions")
 
 type uploadSession struct {
 	ID      string
@@ -42,7 +45,11 @@ func (s *uploadSessionStore) session(w http.ResponseWriter, r *http.Request, has
 
 	if cookie, err := r.Cookie(uploadSessionCookieName(hash)); err == nil {
 		if session, ok := verifyUploadSession(cookie.Value, hash, key); ok && (session.Folder != "") == useFolder {
-			s.ensureFiles(hash, session)
+			if session.Folder == "" {
+				if err := s.ensureFiles(hash, session); err != nil {
+					return uploadSession{}, err
+				}
+			}
 			return session, nil
 		}
 	}
@@ -56,7 +63,11 @@ func (s *uploadSessionStore) session(w http.ResponseWriter, r *http.Request, has
 		session.Folder = "upload_" + time.Now().Format("2006-01-02_03-04-05_PM") + "_" + id[:10]
 	}
 
-	s.ensureFiles(hash, session)
+	if session.Folder == "" {
+		if err := s.ensureFiles(hash, session); err != nil {
+			return uploadSession{}, err
+		}
+	}
 	cookie, err := signUploadSession(session, hash, key)
 	if err != nil {
 		return uploadSession{}, err
@@ -126,17 +137,29 @@ func splitUploadSessionCookie(value string) []string {
 	return nil
 }
 
-func (s *uploadSessionStore) ensureFiles(hash string, session uploadSession) {
+func (s *uploadSessionStore) ensureFiles(hash string, session uploadSession) error {
 	s.Lock()
 	defer s.Unlock()
+	now := time.Now()
+	for key, stored := range s.sessions {
+		if !now.Before(stored.expires) {
+			delete(s.sessions, key)
+		}
+	}
 	key := hash + ":" + session.ID
-	if s.sessions[key] == nil || time.Now().After(s.sessions[key].expires) {
+	if s.sessions[key] == nil {
+		if len(s.sessions) >= maxTrackedPublicUploadSessions {
+			return errTooManyPublicUploadSessions
+		}
 		s.sessions[key] = &uploadSessionFiles{expires: time.Unix(session.Expires, 0), files: map[string]struct{}{}}
 	}
+	return nil
 }
 
 func (s *uploadSessionStore) add(hash string, session uploadSession, file string) {
-	s.ensureFiles(hash, session)
+	if err := s.ensureFiles(hash, session); err != nil {
+		return
+	}
 	s.Lock()
 	defer s.Unlock()
 	if stored := s.sessions[hash+":"+session.ID]; stored != nil && time.Now().Before(stored.expires) {

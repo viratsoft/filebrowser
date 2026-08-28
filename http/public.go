@@ -137,7 +137,7 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 		if d.rawShare.UploadOnly {
 			session, err := publicUploadSessions.session(w, r, d.rawShare.Hash, d.settings.Key, d.rawShare.SessionUploadFolder)
 			if err != nil {
-				return http.StatusInternalServerError, err
+				return uploadSessionErrorStatus(err), err
 			}
 			if session.Folder != "" {
 				file, err = visitorSessionFolderInfo(d, file, session.Folder)
@@ -185,7 +185,7 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	}
 	session, err := publicUploadSessions.session(w, r, link.Hash, d.settings.Key, link.SessionUploadFolder)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return uploadSessionErrorStatus(err), err
 	}
 
 	user, err := d.store.Users.Get(d.server.Root, d.server.FollowExternalSymlinks, link.UserID)
@@ -215,11 +215,6 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	if !d.Check(targetPath) {
 		return http.StatusForbidden, nil
 	}
-	if session.Folder != "" {
-		if err := d.user.Fs.MkdirAll("/"+session.Folder, d.settings.DirMode); err != nil {
-			return errToStatus(err), err
-		}
-	}
 	if exists, err := afero.Exists(d.user.Fs, targetPath); err != nil {
 		return http.StatusInternalServerError, err
 	} else if exists {
@@ -227,7 +222,15 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	}
 
 	created := false
+	folderCreated := false
 	err = d.RunHook(func() error {
+		if session.Folder != "" {
+			var folderErr error
+			folderCreated, folderErr = createVisitorSessionFolder(d.user.Fs, session.Folder, d.settings.DirMode)
+			if folderErr != nil {
+				return folderErr
+			}
+		}
 		var writeErr error
 		created, writeErr = writeNewPublicUpload(d.user.Fs, targetPath, r.Body, d.settings.FileMode)
 		return writeErr
@@ -235,10 +238,33 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	if err != nil && created {
 		_ = d.user.Fs.RemoveAll(targetPath)
 	}
+	if err != nil && folderCreated {
+		// Remove only an empty folder. A concurrent upload for the same visitor
+		// may already have put a file there, and must never be removed here.
+		_ = d.user.Fs.Remove("/" + session.Folder)
+	}
 	if err == nil {
 		publicUploadSessions.add(link.Hash, session, strings.TrimPrefix(targetPath, "/"))
 	}
 	return errToStatus(err), err
+}
+
+func uploadSessionErrorStatus(err error) int {
+	if errors.Is(err, errTooManyPublicUploadSessions) {
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusInternalServerError
+}
+
+func createVisitorSessionFolder(afs afero.Fs, folder string, mode os.FileMode) (bool, error) {
+	err := afs.Mkdir("/"+folder, mode)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {

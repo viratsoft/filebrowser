@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/afero"
 )
 
 func TestUploadSessionSignatureBindsFolderToShare(t *testing.T) {
@@ -46,5 +48,30 @@ func TestExpiredUploadSessionIsRejected(t *testing.T) {
 	}
 	if _, ok := verifyUploadSession(cookie, "share-a", key); ok {
 		t.Fatal("expired session must be rejected")
+	}
+}
+
+func TestTrackedUploadSessionsPruneExpiredEntries(t *testing.T) {
+	store := uploadSessionStore{sessions: map[string]*uploadSessionFiles{
+		"share:expired": {expires: time.Now().Add(-time.Second), files: map[string]struct{}{}},
+	}}
+	session := uploadSession{ID: "active", Expires: time.Now().Add(time.Hour).Unix()}
+	if err := store.ensureFiles("share", session); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.sessions) != 1 || store.sessions["share:active"] == nil {
+		t.Fatalf("expected only the active session to remain, got %#v", store.sessions)
+	}
+}
+
+func TestCreateVisitorSessionFolderIsIdempotent(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	created, err := createVisitorSessionFolder(fs, "upload_2026-08-29_09-42-18_PM_random", 0o755)
+	if err != nil || !created {
+		t.Fatalf("expected a new visitor folder, created=%v err=%v", created, err)
+	}
+	created, err = createVisitorSessionFolder(fs, "upload_2026-08-29_09-42-18_PM_random", 0o755)
+	if err != nil || created {
+		t.Fatalf("expected existing visitor folder to be reused, created=%v err=%v", created, err)
 	}
 }
