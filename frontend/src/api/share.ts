@@ -22,6 +22,7 @@ export async function create(
   unit = "hours",
   allowUpload = false,
   uploadOnly = false,
+  sessionUploadFolder = false,
   name = ""
 ) {
   url = removePrefix(url);
@@ -30,13 +31,14 @@ export async function create(
     url += `?expires=${expires}&unit=${unit}`;
   }
   let body = "{}";
-  if (password != "" || expires !== "" || unit !== "hours" || allowUpload || uploadOnly || name) {
+  if (password != "" || expires !== "" || unit !== "hours" || allowUpload || uploadOnly || sessionUploadFolder || name) {
     body = JSON.stringify({
       password: password,
       expires: expires.toString(), // backend expects string not number
       unit: unit,
       allowUpload,
       uploadOnly,
+      sessionUploadFolder,
       name,
     });
   }

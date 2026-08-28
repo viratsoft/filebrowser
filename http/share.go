@@ -24,26 +24,28 @@ import (
 // would be crackable offline) and the bypass Token — exposing only whether the
 // share is password-protected via HasPassword.
 type shareResponse struct {
-	Hash        string `json:"hash"`
-	Path        string `json:"path"`
-	UserID      uint   `json:"userID"`
-	Expire      int64  `json:"expire"`
-	HasPassword bool   `json:"hasPassword"`
-	AllowUpload bool   `json:"allowUpload"`
-	UploadOnly  bool   `json:"uploadOnly"`
-	Name        string `json:"name"`
+	Hash                string `json:"hash"`
+	Path                string `json:"path"`
+	UserID              uint   `json:"userID"`
+	Expire              int64  `json:"expire"`
+	HasPassword         bool   `json:"hasPassword"`
+	AllowUpload         bool   `json:"allowUpload"`
+	UploadOnly          bool   `json:"uploadOnly"`
+	SessionUploadFolder bool   `json:"sessionUploadFolder"`
+	Name                string `json:"name"`
 }
 
 func toShareResponse(l *share.Link) *shareResponse {
 	return &shareResponse{
-		Hash:        l.Hash,
-		Path:        l.Path,
-		UserID:      l.UserID,
-		Expire:      l.Expire,
-		HasPassword: l.PasswordHash != "",
-		AllowUpload: l.AllowUpload,
-		UploadOnly:  l.UploadOnly,
-		Name:        l.Name,
+		Hash:                l.Hash,
+		Path:                l.Path,
+		UserID:              l.UserID,
+		Expire:              l.Expire,
+		HasPassword:         l.PasswordHash != "",
+		AllowUpload:         l.AllowUpload,
+		UploadOnly:          l.UploadOnly,
+		SessionUploadFolder: l.SessionUploadFolder,
+		Name:                l.Name,
 	}
 }
 
@@ -188,6 +190,9 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 	if body.UploadOnly && !body.AllowUpload {
 		return http.StatusBadRequest, errors.New("upload-only shares must allow uploads")
 	}
+	if body.SessionUploadFolder && !body.UploadOnly {
+		return http.StatusBadRequest, errors.New("session upload folders require an upload-only share")
+	}
 	body.Name = strings.TrimSpace(body.Name)
 	if body.AllowUpload && !d.user.Perm.Create {
 		return http.StatusForbidden, nil
@@ -239,15 +244,16 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 	}
 
 	s = &share.Link{
-		Path:         r.URL.Path,
-		Hash:         str,
-		Expire:       expire,
-		UserID:       d.user.ID,
-		PasswordHash: string(hash),
-		Token:        token,
-		AllowUpload:  body.AllowUpload,
-		UploadOnly:   body.UploadOnly,
-		Name:         body.Name,
+		Path:                r.URL.Path,
+		Hash:                str,
+		Expire:              expire,
+		UserID:              d.user.ID,
+		PasswordHash:        string(hash),
+		Token:               token,
+		AllowUpload:         body.AllowUpload,
+		UploadOnly:          body.UploadOnly,
+		SessionUploadFolder: body.SessionUploadFolder,
+		Name:                body.Name,
 	}
 
 	if err := d.store.Share.Save(s); err != nil {

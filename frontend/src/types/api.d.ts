@@ -28,6 +28,7 @@ interface Share {
   hasPassword?: boolean;
 	allowUpload?: boolean;
 	uploadOnly?: boolean;
+	sessionUploadFolder?: boolean;
 	name?: string;
   username?: string;
 }

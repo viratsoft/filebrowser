@@ -171,6 +171,8 @@
     "uploadOnly": "Hide existing files from visitors",
     "uploadOnlyHint": "Visitors can see only files uploaded in their current browser session.",
     "uploadOnlyNotice": "This link accepts uploads only. Downloading, viewing, renaming, and deleting files are disabled.",
+    "sessionUploadFolder": "Create a separate folder for each visitor session",
+    "sessionUploadFolderHint": "Uploads from the same browser stay together for 24 hours in a server-generated timestamped folder.",
     "shareName": "Share name",
     "shareNameHint": "Optional — visible only in your share list",
     "resolution": "Resolution",

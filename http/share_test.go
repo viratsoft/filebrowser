@@ -146,6 +146,30 @@ func TestSharePostHandlerDoesNotLeakSecrets(t *testing.T) {
 	}
 }
 
+func TestSharePostHandlerValidatesSessionUploadFolders(t *testing.T) {
+	root := t.TempDir()
+	key := []byte("test-signing-key")
+	perm := users.Permissions{Share: true, Download: true, Create: true}
+	st := scopedUserStorage(t, root, perm, key)
+	signed := signToken(t, perm, key)
+	handler := handle(sharePostHandler, "", st, &settings.Server{Root: root})
+
+	request := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		req.Header.Set("X-Auth", signed)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := request(`{"allowUpload":true,"uploadOnly":true,"sessionUploadFolder":true}`); rec.Code != http.StatusOK {
+		t.Fatalf("expected session-folder share creation to succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := request(`{"allowUpload":true,"sessionUploadFolder":true}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected session folder without upload-only to be rejected, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func signShareTestToken(t *testing.T, id uint, username string, perm users.Permissions, key []byte) string {
 	t.Helper()
 

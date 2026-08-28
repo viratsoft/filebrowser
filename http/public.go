@@ -33,7 +33,6 @@ var withHashFile = func(fn handleFunc) handleFunc {
 			// An upload-only share has one readable endpoint: its root listing.
 			// File metadata and content remain unavailable even to the visitor that
 			// uploaded the file, so guessing a filename cannot become a read path.
-			publicUploadSessions.session(w, r, link.Hash)
 			if ifPath != "/" {
 				return http.StatusForbidden, nil
 			}
@@ -136,15 +135,25 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 		file.Sorting = files.Sorting{By: "name", Asc: false}
 		file.ApplySort()
 		if d.rawShare.UploadOnly {
-			sessionID := publicUploadSessions.session(w, r, d.rawShare.Hash)
-			allowed := publicUploadSessions.files(d.rawShare.Hash, sessionID)
-			items := file.Items[:0]
-			for _, item := range file.Items {
-				if _, ok := allowed[item.Name]; ok {
-					items = append(items, item)
-				}
+			session, err := publicUploadSessions.session(w, r, d.rawShare.Hash, d.settings.Key, d.rawShare.SessionUploadFolder)
+			if err != nil {
+				return http.StatusInternalServerError, err
 			}
-			file.Items, file.NumFiles, file.NumDirs = items, len(items), 0
+			if session.Folder != "" {
+				file, err = visitorSessionFolderInfo(d, file, session.Folder)
+				if err != nil {
+					return errToStatus(err), err
+				}
+			} else {
+				allowed := publicUploadSessions.files(d.rawShare.Hash, session)
+				items := file.Items[:0]
+				for _, item := range file.Items {
+					if _, ok := allowed[item.Name]; ok {
+						items = append(items, item)
+					}
+				}
+				file.Items, file.NumFiles, file.NumDirs = items, len(items), 0
+			}
 		}
 	}
 
@@ -171,9 +180,12 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	if !link.AllowUpload {
 		return http.StatusForbidden, nil
 	}
-	sessionID := publicUploadSessions.session(w, r, link.Hash)
 	if status, err := authenticateShareRequest(r, link); status != 0 || err != nil {
 		return status, err
+	}
+	session, err := publicUploadSessions.session(w, r, link.Hash, d.settings.Key, link.SessionUploadFolder)
+	if err != nil {
+		return http.StatusInternalServerError, err
 	}
 
 	user, err := d.store.Users.Get(d.server.Root, d.server.FollowExternalSymlinks, link.UserID)
@@ -196,10 +208,19 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	basePath := slashClean(link.Path)
 	d.user.Fs = files.NewFs(d.user.Fs, basePath, d.server.FollowExternalSymlinks)
 	d.checkerPrefix = basePath
-	if !d.Check(relativePath) {
+	targetPath := relativePath
+	if session.Folder != "" {
+		targetPath = "/" + session.Folder + relativePath
+	}
+	if !d.Check(targetPath) {
 		return http.StatusForbidden, nil
 	}
-	if exists, err := afero.Exists(d.user.Fs, relativePath); err != nil {
+	if session.Folder != "" {
+		if err := d.user.Fs.MkdirAll("/"+session.Folder, d.settings.DirMode); err != nil {
+			return errToStatus(err), err
+		}
+	}
+	if exists, err := afero.Exists(d.user.Fs, targetPath); err != nil {
 		return http.StatusInternalServerError, err
 	} else if exists {
 		return http.StatusConflict, nil
@@ -208,14 +229,14 @@ var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) 
 	created := false
 	err = d.RunHook(func() error {
 		var writeErr error
-		created, writeErr = writeNewPublicUpload(d.user.Fs, relativePath, r.Body, d.settings.FileMode)
+		created, writeErr = writeNewPublicUpload(d.user.Fs, targetPath, r.Body, d.settings.FileMode)
 		return writeErr
-	}, "upload", relativePath, "", d.user)
+	}, "upload", targetPath, "", d.user)
 	if err != nil && created {
-		_ = d.user.Fs.RemoveAll(relativePath)
+		_ = d.user.Fs.RemoveAll(targetPath)
 	}
 	if err == nil {
-		publicUploadSessions.add(link.Hash, sessionID, strings.TrimPrefix(relativePath, "/"))
+		publicUploadSessions.add(link.Hash, session, strings.TrimPrefix(targetPath, "/"))
 	}
 	return errToStatus(err), err
 }
@@ -231,6 +252,37 @@ var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, 
 
 	return rawDirHandler(w, r, d, file)
 })
+
+func visitorSessionFolderInfo(d *data, root *files.FileInfo, folder string) (*files.FileInfo, error) {
+	folderPath := "/" + folder
+	exists, err := afero.Exists(d.user.Fs, folderPath)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		root.Items, root.NumFiles, root.NumDirs = nil, 0, 0
+		return root, nil
+	}
+
+	info, err := files.NewFileInfo(&files.FileOptions{
+		Fs:      d.user.Fs,
+		Path:    folderPath,
+		Modify:  d.user.Perm.Modify,
+		Expand:  true,
+		Checker: d,
+		Token:   d.rawShare.Token,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir {
+		return nil, errors.New("visitor session path is not a directory")
+	}
+	info.Name = root.Name
+	info.Sorting = files.Sorting{By: "name", Asc: false}
+	info.ApplySort()
+	return info, nil
+}
 
 // writeNewPublicUpload creates exactly one new file. O_EXCL closes the gap
 // between a pre-flight existence check and the write, so an upload can never

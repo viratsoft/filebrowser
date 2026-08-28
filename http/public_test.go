@@ -263,6 +263,96 @@ func TestWriteNewPublicUploadNeverOverwrites(t *testing.T) {
 	}
 }
 
+func TestUploadOnlySessionFolderPersistsAndSeparatesVisitors(t *testing.T) {
+	publicUploadSessions.Lock()
+	originalSessions := publicUploadSessions.sessions
+	publicUploadSessions.sessions = map[string]*uploadSessionFiles{}
+	publicUploadSessions.Unlock()
+	t.Cleanup(func() {
+		publicUploadSessions.Lock()
+		publicUploadSessions.sessions = originalSessions
+		publicUploadSessions.Unlock()
+	})
+
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shared, "existing.txt"), []byte("private"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true, Create: true}, []byte("test-signing-key"))
+	if err := st.Share.Save(&share.Link{Hash: "session-folder", UserID: 1, Path: "/shared", AllowUpload: true, UploadOnly: true, SessionUploadFolder: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	shareHandler := handle(publicShareHandler, "/api/public/share/", st, &settings.Server{})
+	uploadHandler := handle(publicUploadHandler, "/api/public/upload/", st, &settings.Server{})
+	request := func(handler http.Handler, method, path, body string, cookies []*http.Cookie) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		for _, cookie := range cookies {
+			req.AddCookie(cookie)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	firstListing := request(shareHandler, http.MethodGet, "/api/public/share/session-folder/", "", nil)
+	if firstListing.Code != http.StatusOK || strings.Contains(firstListing.Body.String(), "existing.txt") {
+		t.Fatalf("expected an empty private visitor listing, got %d: %s", firstListing.Code, firstListing.Body.String())
+	}
+	firstCookies := firstListing.Result().Cookies()
+	if len(firstCookies) == 0 {
+		t.Fatal("expected a signed visitor-session cookie")
+	}
+	if rec := request(uploadHandler, http.MethodPost, "/api/public/upload/session-folder/one.txt", "one", firstCookies); rec.Code != http.StatusOK {
+		t.Fatalf("expected first upload to succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	entries, err := os.ReadDir(shared)
+	if err != nil || len(entries) != 2 || !entries[1].IsDir() {
+		t.Fatalf("expected one isolated visitor folder, entries=%v err=%v", entries, err)
+	}
+	visitorFolder := entries[1].Name()
+	if !strings.HasPrefix(visitorFolder, "upload_") {
+		t.Fatalf("unexpected server-generated visitor folder name %q", visitorFolder)
+	}
+	if contents, err := os.ReadFile(filepath.Join(shared, visitorFolder, "one.txt")); err != nil || string(contents) != "one" {
+		t.Fatalf("first upload is not in its visitor folder: contents=%q err=%v", contents, err)
+	}
+
+	// A restart clears the in-memory display cache, but the signed cookie keeps
+	// the same server-generated folder for the full session lifetime.
+	publicUploadSessions.Lock()
+	publicUploadSessions.sessions = map[string]*uploadSessionFiles{}
+	publicUploadSessions.Unlock()
+	if rec := request(shareHandler, http.MethodGet, "/api/public/share/session-folder/", "", firstCookies); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "one.txt") {
+		t.Fatalf("expected the first visitor's folder after restart, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := request(uploadHandler, http.MethodPost, "/api/public/upload/session-folder/two.txt", "two", firstCookies); rec.Code != http.StatusOK {
+		t.Fatalf("expected returning visitor upload to succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(shared, visitorFolder, "two.txt")); err != nil {
+		t.Fatalf("returning visitor did not reuse its folder: %v", err)
+	}
+
+	secondListing := request(shareHandler, http.MethodGet, "/api/public/share/session-folder/", "", nil)
+	secondCookies := secondListing.Result().Cookies()
+	if secondListing.Code != http.StatusOK || strings.Contains(secondListing.Body.String(), "one.txt") || len(secondCookies) == 0 {
+		t.Fatalf("expected a separate empty visitor listing, got %d: %s", secondListing.Code, secondListing.Body.String())
+	}
+	if rec := request(uploadHandler, http.MethodPost, "/api/public/upload/session-folder/other.txt", "other", secondCookies); rec.Code != http.StatusOK {
+		t.Fatalf("expected second visitor upload to succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+	entries, err = os.ReadDir(shared)
+	if err != nil || len(entries) != 3 {
+		t.Fatalf("expected two isolated visitor folders, entries=%v err=%v", entries, err)
+	}
+}
+
 // TestPublicShareHandlerRules ensures that owner rules keep applying to paths
 // below a shared directory, even though the share rebases the filesystem onto
 // that directory. A deny rule relative to the owner's scope must not be

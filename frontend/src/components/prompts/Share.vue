@@ -126,6 +126,11 @@
           {{ $t("prompts.uploadOnly") }}
         </label>
         <p v-if="isDirectory && allowUpload" class="share-hint">{{ $t("prompts.uploadOnlyHint") }}</p>
+        <label v-if="isDirectory && uploadOnly" class="checkbox share-session-folder-option">
+          <input type="checkbox" v-model="sessionUploadFolder" />
+          {{ $t("prompts.sessionUploadFolder") }}
+        </label>
+        <p v-if="isDirectory && uploadOnly" class="share-hint">{{ $t("prompts.sessionUploadFolderHint") }}</p>
       </div>
 
       <div class="card-action">
@@ -172,6 +177,7 @@ export default {
       password: "",
       allowUpload: false,
       uploadOnly: false,
+      sessionUploadFolder: false,
       name: "",
       listing: true,
     };
@@ -199,6 +205,17 @@ export default {
     isDirectory() {
       if (!this.isListing) return this.req?.isDir;
       return this.selectedCount === 1 && this.req.items[this.selected[0]].isDir;
+    },
+  },
+  watch: {
+    allowUpload(enabled) {
+      if (!enabled) {
+        this.uploadOnly = false;
+        this.sessionUploadFolder = false;
+      }
+    },
+    uploadOnly(enabled) {
+      if (!enabled) this.sessionUploadFolder = false;
     },
   },
   async beforeMount() {
@@ -249,6 +266,7 @@ export default {
             "hours",
             this.allowUpload,
             this.uploadOnly,
+            this.sessionUploadFolder,
             this.name
           );
         } else {
@@ -259,6 +277,7 @@ export default {
             this.unit,
             this.allowUpload,
             this.uploadOnly,
+            this.sessionUploadFolder,
             this.name
           );
         }
@@ -271,6 +290,7 @@ export default {
         this.password = "";
         this.allowUpload = false;
         this.uploadOnly = false;
+        this.sessionUploadFolder = false;
         this.name = "";
 
         this.listing = true;
@@ -330,6 +350,7 @@ export default {
   margin-top: 1.25rem;
 }
 .share-upload-only-option { display: block; margin-top: 1rem; }
+.share-session-folder-option { display: block; margin-top: 1rem; }
 .share-hint { color: var(--text-secondary, #777); font-size: .85rem; margin: .35rem 0 0 2rem; }
 .share-field-label { margin-top: 1.25rem; }
 </style>
