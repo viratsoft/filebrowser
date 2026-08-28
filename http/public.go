@@ -11,6 +11,7 @@ import (
 
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/share"
+	"github.com/spf13/afero"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -95,6 +96,7 @@ var withHashFile = func(fn handleFunc) handleFunc {
 		}
 
 		d.raw = file
+		d.rawShare = link
 		return fn(w, r, d)
 	}
 }
@@ -122,11 +124,72 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 	if file.IsDir {
 		file.Sorting = files.Sorting{By: "name", Asc: false}
 		file.ApplySort()
-		return renderJSON(w, r, file)
 	}
 
-	return renderJSON(w, r, file)
+	return renderJSON(w, r, struct {
+		*files.FileInfo
+		AllowUpload bool `json:"allowUpload"`
+	}{FileInfo: file, AllowUpload: d.rawShare.AllowUpload})
 })
+
+// publicUploadHandler accepts a new file at the root of an upload-enabled
+// directory share. It does not accept nested paths or overwrites, keeping
+// anonymous access limited to adding files only.
+var publicUploadHandler = func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	id, relativePath := ifPathWithName(r)
+	if id == "" || relativePath == "/" || strings.Contains(relativePath, "\\") || strings.Contains(strings.TrimPrefix(relativePath, "/"), "/") {
+		return http.StatusBadRequest, nil
+	}
+
+	link, err := d.store.Share.GetByHash(id)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	if !link.AllowUpload {
+		return http.StatusForbidden, nil
+	}
+	if status, err := authenticateShareRequest(r, link); status != 0 || err != nil {
+		return status, err
+	}
+
+	user, err := d.store.Users.Get(d.server.Root, d.server.FollowExternalSymlinks, link.UserID)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	if !user.Perm.Share || !user.Perm.Download || !user.Perm.Create {
+		return http.StatusForbidden, nil
+	}
+
+	d.user = user
+	root, err := files.NewFileInfo(&files.FileOptions{Fs: d.user.Fs, Path: link.Path, Checker: d})
+	if err != nil {
+		return errToStatus(err), err
+	}
+	if !root.IsDir {
+		return http.StatusBadRequest, nil
+	}
+
+	basePath := slashClean(link.Path)
+	d.user.Fs = files.NewFs(d.user.Fs, basePath, d.server.FollowExternalSymlinks)
+	d.checkerPrefix = basePath
+	if !d.Check(relativePath) {
+		return http.StatusForbidden, nil
+	}
+	if exists, err := afero.Exists(d.user.Fs, relativePath); err != nil {
+		return http.StatusInternalServerError, err
+	} else if exists {
+		return http.StatusConflict, nil
+	}
+
+	err = d.RunHook(func() error {
+		_, writeErr := writeFile(d.user.Fs, relativePath, r.Body, d.settings.FileMode, d.settings.DirMode)
+		return writeErr
+	}, "upload", relativePath, "", d.user)
+	if err != nil {
+		_ = d.user.Fs.RemoveAll(relativePath)
+	}
+	return errToStatus(err), err
+}
 
 var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	file := d.raw.(*files.FileInfo)

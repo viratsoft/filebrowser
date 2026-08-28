@@ -20,6 +20,12 @@
         <i class="material-icons">content_paste</i>
       </button>
       <action
+        v-if="req?.isDir && req.allowUpload"
+        icon="upload"
+        :label="t('buttons.upload')"
+        @action="openUpload"
+      />
+      <action
         icon="check_circle"
         :label="t('buttons.selectMultiple')"
         @action="toggleMultipleSelection"
@@ -27,6 +33,13 @@
     </header-bar>
 
     <breadcrumbs :base="'/share/' + hash" />
+    <input
+      ref="uploadInput"
+      type="file"
+      multiple
+      hidden
+      @change="uploadFiles"
+    />
 
     <div v-if="layoutStore.loading">
       <h2 class="message delayed" style="padding-top: 3em !important">
@@ -319,6 +332,7 @@ import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { StatusError } from "@/api/utils";
 import { copy } from "@/utils/clipboard";
+import { baseURL } from "@/utils/constants";
 
 const error = ref<StatusError | null>(null);
 const showLimit = ref<number>(100);
@@ -328,6 +342,7 @@ const hash = ref<string>("");
 const token = ref<string>("");
 const audio = ref<HTMLAudioElement>();
 const tag = ref<boolean>(false);
+const uploadInput = ref<HTMLInputElement>();
 
 const $showError = inject<IToastError>("$showError")!;
 const $showSuccess = inject<IToastSuccess>("$showSuccess")!;
@@ -440,6 +455,30 @@ const keyEvent = (event: KeyboardEvent) => {
 
 const toggleMultipleSelection = () => {
   fileStore.toggleMultiple();
+};
+
+const openUpload = () => uploadInput.value?.click();
+
+const uploadFiles = async (event: Event) => {
+  const selectedFiles = (event.target as HTMLInputElement).files;
+  if (!selectedFiles || !hash.value) return;
+
+  try {
+    for (const file of Array.from(selectedFiles)) {
+      const uploadURL = new URL(
+        `${baseURL}/api/public/upload/${encodeURIComponent(hash.value)}/${encodeURIComponent(file.name)}`,
+        window.location.origin
+      );
+      if (token.value) uploadURL.searchParams.set("token", token.value);
+      const response = await fetch(uploadURL, { method: "POST", body: file });
+      if (!response.ok) throw new Error(await response.text());
+    }
+    await fetchData();
+  } catch (err) {
+    $showError(err instanceof Error ? err : String(err));
+  } finally {
+    (event.target as HTMLInputElement).value = "";
+  }
 };
 
 const isSingleFile = () =>

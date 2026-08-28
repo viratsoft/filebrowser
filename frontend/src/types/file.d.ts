@@ -18,6 +18,7 @@ interface Resource extends ResourceBase {
   sorting: Sorting;
   hash?: string;
   token?: string;
+  allowUpload?: boolean;
   index: number;
   subtitles?: string[];
   content?: string;

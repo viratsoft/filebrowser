@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/asdine/storm/v3"
@@ -141,6 +143,49 @@ func TestPublicShareHandlerAuthentication(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestPublicUploadHandler(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	key := []byte("test-signing-key")
+	perm := users.Permissions{Share: true, Download: true, Create: true}
+	st := scopedUserStorage(t, root, perm, key)
+	if err := st.Share.Save(&share.Link{Hash: "upload", UserID: 1, Path: "/shared", AllowUpload: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := handle(publicUploadHandler, "", st, &settings.Server{})
+	request := func(path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := request("/upload/new.txt", "guest upload"); rec.Code != http.StatusOK {
+		t.Fatalf("expected upload success, got %d: %s", rec.Code, rec.Body.String())
+	}
+	data, err := os.ReadFile(filepath.Join(shared, "new.txt"))
+	if err != nil || string(data) != "guest upload" {
+		t.Fatalf("uploaded file mismatch: data=%q err=%v", data, err)
+	}
+	if rec := request("/upload/new.txt", "overwrite"); rec.Code != http.StatusConflict {
+		t.Fatalf("expected no-overwrite conflict, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := request("/upload/nested/file.txt", "escape"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected nested path rejection, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := st.Share.Save(&share.Link{Hash: "readonly", UserID: 1, Path: "/shared"}); err != nil {
+		t.Fatal(err)
+	}
+	if rec := request("/readonly/blocked.txt", "blocked"); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected disabled-upload rejection, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

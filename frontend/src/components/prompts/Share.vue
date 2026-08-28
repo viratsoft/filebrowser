@@ -114,6 +114,10 @@
           v-model.trim="password"
           tabindex="3"
         />
+        <label v-if="isDirectory" class="checkbox">
+          <input type="checkbox" v-model="allowUpload" tabindex="4" />
+          {{ $t("prompts.allowUpload") }}
+        </label>
       </div>
 
       <div class="card-action">
@@ -158,6 +162,7 @@ export default {
       links: [],
       clip: null,
       password: "",
+      allowUpload: false,
       listing: true,
     };
   },
@@ -180,6 +185,10 @@ export default {
       }
 
       return this.req.items[this.selected[0]].url;
+    },
+    isDirectory() {
+      if (!this.isListing) return this.req?.isDir;
+      return this.selectedCount === 1 && this.req.items[this.selected[0]].isDir;
     },
   },
   async beforeMount() {
@@ -223,13 +232,20 @@ export default {
         let res = null;
 
         if (!this.time) {
-          res = await api.share.create(this.url, this.password);
+          res = await api.share.create(
+            this.url,
+            this.password,
+            "",
+            "hours",
+            this.allowUpload
+          );
         } else {
           res = await api.share.create(
             this.url,
             this.password,
             this.time,
-            this.unit
+            this.unit,
+            this.allowUpload
           );
         }
 
@@ -239,6 +255,7 @@ export default {
         this.time = 0;
         this.unit = "hours";
         this.password = "";
+        this.allowUpload = false;
 
         this.listing = true;
       } catch (e) {

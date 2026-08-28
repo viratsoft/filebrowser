@@ -29,6 +29,7 @@ type shareResponse struct {
 	UserID      uint   `json:"userID"`
 	Expire      int64  `json:"expire"`
 	HasPassword bool   `json:"hasPassword"`
+	AllowUpload bool   `json:"allowUpload"`
 }
 
 func toShareResponse(l *share.Link) *shareResponse {
@@ -38,6 +39,7 @@ func toShareResponse(l *share.Link) *shareResponse {
 		UserID:      l.UserID,
 		Expire:      l.Expire,
 		HasPassword: l.PasswordHash != "",
+		AllowUpload: l.AllowUpload,
 	}
 }
 
@@ -163,7 +165,8 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 	// d.user.Fs is scoped, so Stat also refuses to follow a symlink whose target
 	// escapes the user's scope: that returns a permission error here and so
 	// blocks creating a share that points out of scope.
-	if _, err := d.user.Fs.Stat(r.URL.Path); err != nil {
+	info, err := d.user.Fs.Stat(r.URL.Path)
+	if err != nil {
 		return errToStatus(err), err
 	}
 
@@ -175,9 +178,15 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		}
 		defer r.Body.Close()
 	}
+	if body.AllowUpload && !info.IsDir() {
+		return http.StatusBadRequest, errors.New("uploads can only be enabled for shared folders")
+	}
+	if body.AllowUpload && !d.user.Perm.Create {
+		return http.StatusForbidden, nil
+	}
 
 	bytes := make([]byte, 6)
-	_, err := rand.Read(bytes)
+	_, err = rand.Read(bytes)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -228,6 +237,7 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		UserID:       d.user.ID,
 		PasswordHash: string(hash),
 		Token:        token,
+		AllowUpload:  body.AllowUpload,
 	}
 
 	if err := d.store.Share.Save(s); err != nil {
