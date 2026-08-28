@@ -401,7 +401,10 @@ func authenticateShareRequest(r *http.Request, l *share.Link) (int, error) {
 		return 0, nil
 	}
 
-	if subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("token")), []byte(l.Token)) == 1 {
+	// Never treat two empty strings as a valid bypass credential. This matters
+	// for legacy/manual share records that have a password hash but no token.
+	providedToken := r.URL.Query().Get("token")
+	if l.Token != "" && providedToken != "" && subtle.ConstantTimeCompare([]byte(providedToken), []byte(l.Token)) == 1 {
 		return 0, nil
 	}
 

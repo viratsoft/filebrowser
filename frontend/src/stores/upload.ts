@@ -126,7 +126,7 @@ export const useUploadStore = defineStore("upload", () => {
           $showError(err);
         });
       } else {
-        const onUpload = (event: ProgressEvent) => {
+        const onUpload = (event: { loaded: number }) => {
           upload.rawProgress.sentBytes = event.loaded;
         };
 

@@ -487,7 +487,7 @@ const uploadFiles = async (event: Event) => {
   if (!selectedFiles || !hash.value) return;
 
   for (const file of Array.from(selectedFiles)) {
-    uploadStore.upload("/", file.name, file, false, "file", {
+    uploadStore.upload("/", file.name, file, false, "blob", {
       hash: hash.value,
       token: token.value,
       password: password.value,
