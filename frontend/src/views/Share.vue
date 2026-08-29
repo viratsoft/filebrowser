@@ -262,8 +262,18 @@
           v-if="req.isDir && req.items.length > 0"
           class="share__box share__box__items"
         >
-          <div class="share__box__header" v-if="req.isDir">
-            {{ t("files.files") }}
+          <div class="share__box__header share-list-header" v-if="req.isDir">
+            <span>{{ t("files.files") }}</span>
+            <span class="share-list-stats" aria-live="polite">
+              <span v-if="req.numFiles > 0" class="share-list-stat">
+                <i class="material-icons" aria-hidden="true">insert_drive_file</i>
+                {{ req.numFiles }} {{ t("files.files") }}
+              </span>
+              <span v-if="req.numDirs > 0" class="share-list-stat">
+                <i class="material-icons" aria-hidden="true">folder</i>
+                {{ req.numDirs }} {{ t("files.folders") }}
+              </span>
+            </span>
           </div>
           <div v-if="!isUploadOnly" id="listing" class="list file-icons">
             <item
@@ -593,6 +603,51 @@ onBeforeUnmount(() => {
 
 #shareList {
   overflow-y: scroll;
+}
+
+.share-list-header {
+  align-items: center;
+  border-bottom: 1px solid var(--borderPrimary);
+  display: flex;
+  gap: .75rem;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surfacePrimary);
+}
+
+.share-list-stats {
+  align-items: center;
+  color: var(--textSecondary);
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: .78em;
+  font-weight: normal;
+  gap: .6rem;
+  justify-content: flex-end;
+}
+
+.share-list-stat {
+  align-items: center;
+  display: inline-flex;
+  gap: .22rem;
+  white-space: nowrap;
+}
+
+.share-list-stat .material-icons {
+  font-size: 1.05em;
+}
+
+@media (max-width: 420px) {
+  .share-list-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .share-list-stats {
+    justify-content: flex-start;
+  }
 }
 
 @media (min-width: 930px) {

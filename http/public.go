@@ -114,13 +114,18 @@ var withHashFile = func(fn handleFunc) handleFunc {
 			// Do not leak resumable-upload temporary files from regular readable
 			// shares while an upload is still in progress.
 			items := file.Items[:0]
+			file.NumFiles, file.NumDirs = 0, 0
 			for _, item := range file.Items {
 				if !strings.HasPrefix(item.Name, ".filebrowser-upload-") {
 					items = append(items, item)
+					if item.IsDir {
+						file.NumDirs++
+					} else {
+						file.NumFiles++
+					}
 				}
 			}
 			file.Items = items
-			file.NumFiles = len(items)
 			// extract name from the last directory in the path
 			name := filepath.Base(strings.TrimRight(link.Path, string(filepath.Separator)))
 			file.Name = name
@@ -360,13 +365,18 @@ func visitorSessionFolderInfo(d *data, root *files.FileInfo, folder string) (*fi
 		return nil, errors.New("visitor session path is not a directory")
 	}
 	items := info.Items[:0]
+	info.NumFiles, info.NumDirs = 0, 0
 	for _, item := range info.Items {
 		if !strings.HasPrefix(item.Name, ".filebrowser-upload-") {
 			items = append(items, item)
+			if item.IsDir {
+				info.NumDirs++
+			} else {
+				info.NumFiles++
+			}
 		}
 	}
 	info.Items = items
-	info.NumFiles = len(items)
 	info.Name = root.Name
 	info.Sorting = files.Sorting{By: "name", Asc: false}
 	info.ApplySort()
