@@ -83,24 +83,28 @@ app.provide("$showSuccess", (message: string) => {
   );
 });
 
-app.provide("$showError", (error: Error | string, displayReport = true) => {
-  const $toast = useToast();
-  $toast.error(
-    {
-      component: CustomToast,
-      props: {
-        message: (error as Error).message || error,
-        isReport: !disableExternal && displayReport,
-        // TODO: could you add this to the component itself?
-        reportText: i18n.global.t("buttons.reportIssue"),
+app.provide(
+  "$showError",
+  (error: Error | string, displayReport = true, toastClassName?: string) => {
+    const $toast = useToast();
+    $toast.error(
+      {
+        component: CustomToast,
+        props: {
+          message: (error as Error).message || error,
+          isReport: !disableExternal && displayReport,
+          // TODO: could you add this to the component itself?
+          reportText: i18n.global.t("buttons.reportIssue"),
+        },
       },
-    },
-    {
-      ...toastConfig,
-      timeout: 0,
-      rtl: isRtl(),
-    }
-  );
-});
+      {
+        ...toastConfig,
+        timeout: 0,
+        rtl: isRtl(),
+        toastClassName,
+      }
+    );
+  }
+);
 
 router.isReady().then(() => app.mount("#app"));

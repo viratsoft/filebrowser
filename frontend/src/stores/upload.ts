@@ -157,7 +157,11 @@ export const useUploadStore = defineStore("upload", () => {
           // expected 409 response into a useful, local message without
           // exposing any server-side path information.
           if (upload.publicShare && /^409(?:\s|$)/.test(err.message)) {
-            $showError(`File already exists: ${upload.name}`, false);
+            $showError(
+              `File already exists: ${upload.name}`,
+              false,
+              "compact-conflict-toast"
+            );
             return;
           }
 
