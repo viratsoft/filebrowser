@@ -150,9 +150,19 @@ export const useUploadStore = defineStore("upload", () => {
           ? publicApi.tusUpload(upload.publicShare.hash, upload.name, upload.file!, upload.publicShare.token, upload.publicShare.password, onUpload)
           : api.post(upload.path, upload.file!, upload.overwrite, onUpload);
         await request.catch((err) => {
-            succeeded = false;
-            if (err.message !== "Upload aborted") $showError(err);
-          });
+          succeeded = false;
+          if (err.message === "Upload aborted") return;
+
+          // A public share never overwrites an existing file. Turn the
+          // expected 409 response into a useful, local message without
+          // exposing any server-side path information.
+          if (upload.publicShare && /^409(?:\s|$)/.test(err.message)) {
+            $showError(`File already exists: ${upload.name}`, false);
+            return;
+          }
+
+          $showError(err);
+        });
       }
 
       finishUpload(upload, succeeded);

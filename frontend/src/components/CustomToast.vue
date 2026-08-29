@@ -1,6 +1,6 @@
 <template>
   <div class="t-container">
-    <span>{{ message }}</span>
+    <span class="message" :title="message">{{ message }}</span>
     <button v-if="isReport" class="action" @click.stop="clicked">
       {{ reportText }}
     </button>
@@ -26,6 +26,13 @@ const clicked = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.message {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .action {
   text-align: center;
