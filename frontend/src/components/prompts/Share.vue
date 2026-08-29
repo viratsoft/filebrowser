@@ -38,10 +38,13 @@
                 class="action"
                 :aria-label="$t('buttons.copyDownloadLinkToClipboard')"
                 :title="$t('buttons.copyDownloadLinkToClipboard')"
-                :disabled="!!link.hasPassword"
-                @click="copyToClipboard(buildDownloadLink(link))"
-              >
-                <i class="material-icons">content_paste_go</i>
+              :disabled="!!link.hasPassword"
+              @click="copyToClipboard(buildDownloadLink(link))"
+            >
+                <span class="download-link-icon" aria-hidden="true">
+                  <i class="material-icons">content_paste</i>
+                  <i class="material-icons">file_download</i>
+                </span>
               </button>
             </td>
             <td class="small">
@@ -383,4 +386,7 @@ export default {
 .share-owner-option.disabled { cursor: not-allowed; opacity: .65; }
 .share-hint { color: var(--text-secondary, #777); font-size: .85rem; margin: .35rem 0 0 2rem; }
 .share-field-label { margin-top: 1.25rem; }
+.download-link-icon { display: inline-block; height: 1.5em; position: relative; width: 1.5em; }
+.download-link-icon > :first-child { left: 0; position: absolute; top: 0; }
+.download-link-icon > :last-child { background: var(--surfacePrimary); bottom: -.1em; font-size: .72em; line-height: 1; position: absolute; right: -.15em; }
 </style>
