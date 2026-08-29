@@ -38,12 +38,14 @@
                 class="action"
                 :aria-label="$t('buttons.copyDownloadLinkToClipboard')"
                 :title="$t('buttons.copyDownloadLinkToClipboard')"
-              :disabled="!!link.hasPassword"
-              @click="copyToClipboard(buildDownloadLink(link))"
-            >
+                :disabled="!!link.hasPassword"
+                @click="copyToClipboard(buildDownloadLink(link))"
+              >
                 <span class="download-link-icon" aria-hidden="true">
                   <i class="material-icons">content_paste</i>
-                  <i class="material-icons">file_download</i>
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M12 9v6m-2.2-2.2L12 15l2.2-2.2" />
+                  </svg>
                 </span>
               </button>
             </td>
@@ -386,7 +388,28 @@ export default {
 .share-owner-option.disabled { cursor: not-allowed; opacity: .65; }
 .share-hint { color: var(--text-secondary, #777); font-size: .85rem; margin: .35rem 0 0 2rem; }
 .share-field-label { margin-top: 1.25rem; }
-.download-link-icon { display: inline-block; height: 1.5em; position: relative; width: 1.5em; }
-.download-link-icon > :first-child { left: 0; position: absolute; top: 0; }
-.download-link-icon > :last-child { background: var(--surfacePrimary); bottom: -.1em; font-size: .72em; line-height: 1; position: absolute; right: -.15em; }
+.download-link-icon {
+  display: inline-block;
+  position: relative;
+  vertical-align: middle;
+}
+
+.download-link-icon > i {
+  display: block;
+}
+
+.download-link-icon > svg {
+  color: var(--action);
+  fill: none;
+  height: 1.5em;
+  left: 50%;
+  position: absolute;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+  top: 50%;
+  transform: translate(-50%, -42%);
+  width: 1.5em;
+}
 </style>
