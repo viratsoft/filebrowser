@@ -7,6 +7,10 @@ import * as tus from "@/api/tus";
 
 // TODO: make this into a user setting
 const UPLOADS_LIMIT = 5;
+// Public share uploads are intentionally limited below the normal five-file
+// queue. Three concurrent resumable streams use available bandwidth well
+// without overwhelming slow disks, reverse proxies, or mobile connections.
+const PUBLIC_UPLOADS_LIMIT = 3;
 
 const beforeUnload = (event: Event) => {
   event.preventDefault();
@@ -28,6 +32,7 @@ export const useUploadStore = defineStore("upload", () => {
   const lastUpload = ref<number>(-1);
   const totalBytes = ref<number>(0);
   const sentBytes = ref<number>(0);
+  const publicUploadRevision = ref<number>(0);
 
   //
   // ACTIONS
@@ -98,7 +103,18 @@ export const useUploadStore = defineStore("upload", () => {
   const hasPendingUploads = () =>
     allUploads.value.length > lastUpload.value + 1;
 
-  const isActiveUploadsOnLimit = () => activeUploads.value.size < UPLOADS_LIMIT;
+  const isActiveUploadsOnLimit = () => {
+    if (activeUploads.value.size >= UPLOADS_LIMIT) return false;
+
+    const next = allUploads.value[lastUpload.value + 1];
+    if (!next?.publicShare) return true;
+
+    let publicActiveUploads = 0;
+    for (const active of activeUploads.value) {
+      if (active.publicShare) publicActiveUploads++;
+    }
+    return publicActiveUploads < PUBLIC_UPLOADS_LIMIT;
+  };
 
   const processUploads = async () => {
     if (!hasActiveUploads() && !hasPendingUploads()) {
@@ -164,6 +180,11 @@ export const useUploadStore = defineStore("upload", () => {
       totalBytes.value -= upload.totalBytes - upload.rawProgress.sentBytes;
       upload.sentBytes = upload.rawProgress.sentBytes;
     }
+    if (succeeded && upload.publicShare) {
+      // Share.vue watches this revision and refreshes only the visitor's
+      // listing after every completed file, while other queue items continue.
+      publicUploadRevision.value++;
+    }
     upload.file = null;
 
     activeUploads.value.delete(upload);
@@ -195,6 +216,7 @@ export const useUploadStore = defineStore("upload", () => {
     activeUploads,
     totalBytes,
     sentBytes,
+    publicUploadRevision,
 
     // ACTIONS
     upload,

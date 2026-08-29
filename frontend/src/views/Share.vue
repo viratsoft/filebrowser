@@ -500,6 +500,10 @@ watch(() => fileStore.reload, (reload) => {
   if (reload && route.name === "Share") fetchData();
 });
 
+watch(() => uploadStore.publicUploadRevision, (revision) => {
+  if (revision > 0 && route.name === "Share") fetchData();
+});
+
 const isSingleFile = () =>
   fileStore.selectedCount === 1 &&
   !req.value?.items[fileStore.selected[0]].isDir;
