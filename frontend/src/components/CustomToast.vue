@@ -68,11 +68,14 @@ html[dir="rtl"] .action {
 
 :global(.compact-conflict-toast .Vue-Toastification__toast-body),
 :global(.compact-conflict-toast .Vue-Toastification__toast-component-body) {
-  color: white;
   margin: 0;
   min-width: 0;
   padding: 0;
   width: 100%;
+}
+
+:global(.compact-conflict-toast) .message {
+  color: #fff !important;
 }
 
 :global(.compact-conflict-toast .Vue-Toastification__icon) {
