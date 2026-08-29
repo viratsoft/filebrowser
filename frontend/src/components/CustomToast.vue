@@ -1,6 +1,6 @@
 <template>
   <div class="t-container">
-    <span class="message" :title="message">{{ message }}</span>
+    <span class="toast-message" :title="message">{{ message }}</span>
     <button v-if="isReport" class="action" @click.stop="clicked">
       {{ reportText }}
     </button>
@@ -29,7 +29,8 @@ const clicked = () => {
   padding: 5px 0;
   width: 100%;
 }
-.message {
+.toast-message {
+  color: #fff;
   flex: 1 1 auto;
   font-size: 16px;
   line-height: 20px;
@@ -72,10 +73,6 @@ html[dir="rtl"] .action {
   min-width: 0;
   padding: 0;
   width: 100%;
-}
-
-:global(.compact-conflict-toast) .message {
-  color: #fff !important;
 }
 
 :global(.compact-conflict-toast .Vue-Toastification__icon) {
