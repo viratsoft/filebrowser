@@ -33,7 +33,7 @@
                 <i class="material-icons">content_paste</i>
               </button>
             </td>
-            <td class="small">
+            <td v-if="!link.uploadOnly" class="small">
               <button
                 class="action"
                 :aria-label="$t('buttons.copyDownloadLinkToClipboard')"
