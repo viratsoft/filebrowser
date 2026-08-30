@@ -1,7 +1,7 @@
 <template>
   <div v-show="active" @click="closeHovers" class="overlay"></div>
   <nav :class="{ active }">
-    <template v-if="isLoggedIn">
+    <template v-if="showAuthenticatedActions">
       <button @click="toAccountSettings" class="action">
         <i class="material-icons">person</i>
         <span>{{ user.username }}</span>
@@ -61,7 +61,7 @@
         <span>{{ $t("sidebar.logout") }}</span>
       </button>
     </template>
-    <template v-else>
+    <template v-else-if="showPublicActions">
       <router-link
         v-if="!hideLoginButton"
         class="action"
@@ -161,6 +161,19 @@ export default {
     disableExternal: () => disableExternal,
     disableUsedPercentage: () => disableUsedPercentage,
     canLogout: () => !noAuth && (loginPage || logoutPage !== "/login"),
+    // A share link is its own public surface, even when it is opened in a
+    // browser that also has an authenticated FileBrowser session. Keep the
+    // sidebar shell (credits/help) for the existing share layout, but never
+    // expose account navigation or file-management actions on that route.
+    isShareRoute() {
+      return this.$route.name === "Share";
+    },
+    showAuthenticatedActions() {
+      return this.isLoggedIn && !this.isShareRoute;
+    },
+    showPublicActions() {
+      return !this.isLoggedIn && !this.isShareRoute;
+    },
   },
   methods: {
     ...mapActions(useLayoutStore, ["closeHovers", "showHover"]),
