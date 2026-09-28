@@ -206,7 +206,7 @@ export default {
   },
   methods: {
     ...mapActions(useLayoutStore, ["closeHovers"]),
-    /** @returns {Promise<void>} */
+    /** @type {() => Promise<void>} */
     loadFolderSize: async function () {
       if (this.loadingFolderSize) return;
       this.loadingFolderSize = true;
