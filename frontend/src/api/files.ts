@@ -55,6 +55,12 @@ export async function fetchAll(url: string): Promise<RecursiveEntry[]> {
   return (await res.json()) as RecursiveEntry[];
 }
 
+export async function folderSize(url: string): Promise<number> {
+  url = removePrefix(url);
+  const res = await fetchURL(`/api/resources/size${url}`, {});
+  return ((await res.json()) as { size: number }).size;
+}
+
 async function resourceAction(url: string, method: ApiMethod, content?: any) {
   url = removePrefix(url);
 

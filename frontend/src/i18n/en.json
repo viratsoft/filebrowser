@@ -143,6 +143,8 @@
     "downloadMessage": "Choose the format you wish to download.",
     "error": "Something went wrong",
     "fileInfo": "File information",
+    "calculateSize": "Calculate size",
+    "calculatingSize": "Calculating…",
     "filesSelected": "{count} files selected.",
     "lastModified": "Last Modified",
     "move": "Move",

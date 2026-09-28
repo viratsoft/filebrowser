@@ -28,6 +28,24 @@
       </p>
 
       <template v-if="dir && selected.length === 0">
+        <p class="folder-size">
+          <strong>{{ $t("prompts.size") }}:</strong>
+          <span v-if="folderSize !== null">{{ humanFolderSize }}</span>
+          <button
+            class="button button--flat button--small"
+            type="button"
+            :disabled="loadingFolderSize"
+            @click="loadFolderSize"
+          >
+            {{
+              loadingFolderSize
+                ? $t("prompts.calculatingSize")
+                : folderSize === null
+                  ? $t("prompts.calculateSize")
+                  : $t("buttons.refresh")
+            }}
+          </button>
+        </p>
         <p>
           <strong>{{ $t("prompts.numberFiles") }}:</strong> {{ req.numFiles }}
         </p>
@@ -110,6 +128,18 @@ import { files as api } from "@/api";
 export default {
   name: "info",
   inject: ["$showError"],
+  data: function () {
+    return {
+      folderSize: null,
+      loadingFolderSize: false,
+    };
+  },
+  watch: {
+    "$route.path": function () {
+      this.folderSize = null;
+      this.loadingFolderSize = false;
+    },
+  },
   computed: {
     ...mapState(useFileStore, [
       "req",
@@ -129,6 +159,9 @@ export default {
       }
 
       return filesize(sum);
+    },
+    humanFolderSize: function () {
+      return this.folderSize === null ? "" : filesize(this.folderSize);
     },
     humanTime: function () {
       if (this.selectedCount === 0) {
@@ -173,6 +206,17 @@ export default {
   },
   methods: {
     ...mapActions(useLayoutStore, ["closeHovers"]),
+    loadFolderSize: async function () {
+      if (this.loadingFolderSize) return;
+      this.loadingFolderSize = true;
+      try {
+        this.folderSize = await api.folderSize(this.$route.path);
+      } catch (e) {
+        this.$showError(e);
+      } finally {
+        this.loadingFolderSize = false;
+      }
+    },
     checksum: async function (event, algo) {
       event.preventDefault();
 
@@ -194,3 +238,18 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.folder-size {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.button--small {
+  min-height: 2rem;
+  padding: 0 0.55rem;
+  font-size: 0.85rem;
+}
+</style>

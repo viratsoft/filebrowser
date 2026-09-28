@@ -85,6 +85,53 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	return renderJSON(w, r, file)
 })
 
+type resourceSizeResponse struct {
+	Size int64 `json:"size"`
+}
+
+// resourceSizeHandler is intentionally separate from listing: recursively
+// walking a large directory happens only after an explicit user request.
+var resourceSizeHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	rootPath := r.URL.Path
+	if rootPath == "" {
+		rootPath = "/"
+	}
+	root, err := d.user.Fs.Stat(rootPath)
+	if err != nil {
+		return errToStatus(err), err
+	}
+	if !root.IsDir() || !d.Check(rootPath) {
+		return http.StatusForbidden, nil
+	}
+
+	var size int64
+	err = afero.Walk(d.user.Fs, rootPath, func(currentPath string, info os.FileInfo, err error) error {
+		if contextErr := r.Context().Err(); contextErr != nil {
+			return contextErr
+		}
+		if err != nil {
+			return nil
+		}
+		if !d.Check(currentPath) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		if r.Context().Err() != nil {
+			return 0, err
+		}
+		return http.StatusInternalServerError, err
+	}
+	return renderJSON(w, r, resourceSizeResponse{Size: size})
+})
+
 func resourceDeleteHandler(fileCache FileCache) handleFunc {
 	return withUser(func(_ http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		if r.URL.Path == "/" || !d.user.Perm.Delete {
