@@ -109,7 +109,9 @@ export async function tusUpload(
   password: string,
   onupload: (event: { loaded: number }) => void
 ) {
-  if (!tusSettings || !tus.isSupported) throw new Error("Resumable uploads are not supported by this browser");
+  if (!tusSettings || !tus.isSupported) {
+    throw new Error("Resumable uploads are not supported by this browser");
+  }
   const key = `${hash}:${name}:${content.size}:${content.lastModified}`;
   const attemptID = publicUploadAttemptID();
   const endpoint = new URL(

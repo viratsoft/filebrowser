@@ -105,7 +105,11 @@ func publicUploadAttemptID(r *http.Request) string {
 		return ""
 	}
 	for _, char := range id {
-		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '-' || char == '_') {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '-' &&
+			char != '_' {
 			return ""
 		}
 	}
