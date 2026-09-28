@@ -274,6 +274,85 @@ func TestPublicTusUploadRequiresShareAuthorizationForEveryRequest(t *testing.T) 
 	}
 }
 
+func TestPublicTusCompletedAttemptRecoversWithoutMaskingConflicts(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true, Create: true}, []byte("test-signing-key"))
+	if err := st.Share.Save(&share.Link{Hash: "tus-recovery", UserID: 1, Path: "/shared", AllowUpload: true, UploadOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+	cache := newMemoryUploadCache()
+	post := handle(publicTusPostHandler(cache), "/api/public/tus/", st, &settings.Server{})
+	head := handle(publicTusHeadHandler(cache), "/api/public/tus/", st, &settings.Server{})
+	patch := handle(publicTusPatchHandler(cache), "/api/public/tus/", st, &settings.Server{})
+	const (
+		tusPath   = "/api/public/tus/tus-recovery/report.txt"
+		attemptID = "guest-upload-attempt-1234"
+	)
+	withVisitorSession := func(req *http.Request, cookies []*http.Cookie) {
+		req.Header.Set(publicUploadAttemptHeader, attemptID)
+		for _, cookie := range cookies {
+			req.AddCookie(cookie)
+		}
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, tusPath, nil)
+	createReq.Header.Set("Upload-Length", "6")
+	createReq.Header.Set(publicUploadAttemptHeader, attemptID)
+	createRec := httptest.NewRecorder()
+	post.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("expected TUS create, got %d: %s", createRec.Code, createRec.Body.String())
+	}
+	cookies := createRec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected visitor session cookie")
+	}
+
+	finishReq := httptest.NewRequest(http.MethodPatch, tusPath, strings.NewReader("secret"))
+	finishReq.Header.Set("Content-Type", "application/offset+octet-stream")
+	finishReq.Header.Set("Upload-Offset", "0")
+	withVisitorSession(finishReq, cookies)
+	finishRec := httptest.NewRecorder()
+	patch.ServeHTTP(finishRec, finishReq)
+	if finishRec.Code != http.StatusNoContent {
+		t.Fatalf("expected TUS completion, got %d: %s", finishRec.Code, finishRec.Body.String())
+	}
+
+	resumeReq := httptest.NewRequest(http.MethodHead, tusPath, nil)
+	withVisitorSession(resumeReq, cookies)
+	resumeRec := httptest.NewRecorder()
+	head.ServeHTTP(resumeRec, resumeReq)
+	if resumeRec.Code != http.StatusOK || resumeRec.Header().Get("Upload-Offset") != "6" || resumeRec.Header().Get("X-FileBrowser-Public-Upload-Complete") != "1" {
+		t.Fatalf("expected completed retry recovery, got status=%d headers=%v", resumeRec.Code, resumeRec.Header())
+	}
+
+	replayedPost := httptest.NewRequest(http.MethodPost, tusPath, nil)
+	replayedPost.Header.Set("Upload-Length", "6")
+	withVisitorSession(replayedPost, cookies)
+	replayedPostRec := httptest.NewRecorder()
+	post.ServeHTTP(replayedPostRec, replayedPost)
+	if replayedPostRec.Code != http.StatusConflict || replayedPostRec.Header().Get("X-FileBrowser-Public-Upload-Complete") != "1" {
+		t.Fatalf("expected same-attempt conflict to carry completion receipt, got status=%d headers=%v", replayedPostRec.Code, replayedPostRec.Header())
+	}
+
+	differentAttempt := httptest.NewRequest(http.MethodPost, tusPath, nil)
+	differentAttempt.Header.Set("Upload-Length", "6")
+	differentAttempt.Header.Set(publicUploadAttemptHeader, "different-upload-attempt-1234")
+	for _, cookie := range cookies {
+		differentAttempt.AddCookie(cookie)
+	}
+	differentAttemptRec := httptest.NewRecorder()
+	post.ServeHTTP(differentAttemptRec, differentAttempt)
+	if differentAttemptRec.Code != http.StatusConflict || differentAttemptRec.Header().Get("X-FileBrowser-Public-Upload-Complete") != "" {
+		t.Fatalf("a real filename conflict must not be reported as completed, got status=%d headers=%v", differentAttemptRec.Code, differentAttemptRec.Header())
+	}
+}
+
 func TestUploadOnlyFileShareIsRejected(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("private"), 0o644); err != nil {

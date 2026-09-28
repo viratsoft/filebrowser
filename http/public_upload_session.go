@@ -16,6 +16,7 @@ import (
 
 const uploadSessionTTL = 24 * time.Hour
 const maxTrackedPublicUploadSessions = 10000
+const maxCompletedPublicUploadReceipts = 256
 
 var errTooManyPublicUploadSessions = errors.New("too many active public upload sessions")
 
@@ -26,8 +27,9 @@ type uploadSession struct {
 }
 
 type uploadSessionFiles struct {
-	expires time.Time
-	files   map[string]struct{}
+	expires   time.Time
+	files     map[string]struct{}
+	completed map[string]int64
 }
 
 type uploadSessionStore struct {
@@ -46,10 +48,8 @@ func (s *uploadSessionStore) session(w http.ResponseWriter, r *http.Request, has
 
 	if cookie, err := r.Cookie(uploadSessionCookieName(hash)); err == nil {
 		if session, ok := verifyUploadSession(cookie.Value, hash, key); ok && (session.Folder != "") == useFolder {
-			if session.Folder == "" {
-				if err := s.ensureFiles(hash, session); err != nil {
-					return uploadSession{}, err
-				}
+			if err := s.ensureFiles(hash, session); err != nil {
+				return uploadSession{}, err
 			}
 			return session, nil
 		}
@@ -64,10 +64,8 @@ func (s *uploadSessionStore) session(w http.ResponseWriter, r *http.Request, has
 		session.Folder = "upload_" + time.Now().Format("2006-01-02_03-04-05_PM") + "_" + id[:10]
 	}
 
-	if session.Folder == "" {
-		if err := s.ensureFiles(hash, session); err != nil {
-			return uploadSession{}, err
-		}
+	if err := s.ensureFiles(hash, session); err != nil {
+		return uploadSession{}, err
 	}
 	cookie, err := signUploadSession(session, hash, key)
 	if err != nil {
@@ -161,7 +159,11 @@ func (s *uploadSessionStore) ensureFiles(hash string, session uploadSession) err
 		if len(s.sessions) >= maxTrackedPublicUploadSessions {
 			return errTooManyPublicUploadSessions
 		}
-		s.sessions[key] = &uploadSessionFiles{expires: time.Unix(session.Expires, 0), files: map[string]struct{}{}}
+		s.sessions[key] = &uploadSessionFiles{
+			expires:   time.Unix(session.Expires, 0),
+			files:     map[string]struct{}{},
+			completed: map[string]int64{},
+		}
 	}
 	return nil
 }
@@ -172,9 +174,49 @@ func (s *uploadSessionStore) add(hash string, session uploadSession, file string
 	}
 	s.Lock()
 	defer s.Unlock()
-	if stored := s.sessions[hash+":"+session.ID]; stored != nil && time.Now().Before(stored.expires) {
+	if session.Folder == "" && stored := s.sessions[hash+":"+session.ID]; stored != nil && time.Now().Before(stored.expires) {
 		stored.files[file] = struct{}{}
 	}
+}
+
+// complete records the exact public TUS attempt that published a file. The
+// receipt is scoped to the signed visitor session and expires with it, so a
+// browser that missed the final response while the device was locked can
+// safely finish that same upload without treating a different existing file as
+// a success.
+func (s *uploadSessionStore) complete(hash string, session uploadSession, file, attemptID string, size int64) {
+	if attemptID == "" || s.ensureFiles(hash, session) != nil {
+		return
+	}
+	s.Lock()
+	defer s.Unlock()
+	if stored := s.sessions[hash+":"+session.ID]; stored != nil && time.Now().Before(stored.expires) {
+		if stored.completed == nil {
+			stored.completed = map[string]int64{}
+		}
+		key := publicUploadCompletionKey(file, attemptID)
+		if _, exists := stored.completed[key]; exists || len(stored.completed) < maxCompletedPublicUploadReceipts {
+			stored.completed[key] = size
+		}
+	}
+}
+
+func (s *uploadSessionStore) completedSize(hash string, session uploadSession, file, attemptID string) (int64, bool) {
+	if attemptID == "" {
+		return 0, false
+	}
+	s.Lock()
+	defer s.Unlock()
+	stored := s.sessions[hash+":"+session.ID]
+	if stored == nil || !time.Now().Before(stored.expires) {
+		return 0, false
+	}
+	size, ok := stored.completed[publicUploadCompletionKey(file, attemptID)]
+	return size, ok
+}
+
+func publicUploadCompletionKey(file, attemptID string) string {
+	return file + "\x00" + attemptID
 }
 
 func (s *uploadSessionStore) files(hash string, session uploadSession) map[string]struct{} {

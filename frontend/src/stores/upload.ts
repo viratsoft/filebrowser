@@ -46,6 +46,13 @@ export const useUploadStore = defineStore("upload", () => {
     type: ResourceType,
     publicShare?: Upload["publicShare"]
   ) => {
+    // A mobile browser can replay an input/change event while restoring a
+    // suspended page. Do not start a second anonymous transfer for the same
+    // filename while the original is queued or active; it would correctly be
+    // rejected by the server as a conflict, but create a misleading toast.
+    if (publicShare && allUploads.value.some((entry) => entry.file !== null && entry.name === name && entry.publicShare?.hash === publicShare.hash)) {
+      return;
+    }
     if (!hasActiveUploads() && !hasPendingUploads()) {
       window.addEventListener("beforeunload", beforeUnload);
       buttons.loading("upload");
