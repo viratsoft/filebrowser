@@ -10,6 +10,12 @@ import (
 
 const uploadCacheTTL = 3 * time.Minute
 
+// publicUploadCacheTTL gives a guest visitor enough time to unlock a mobile
+// device and resume a paused transfer. It is deliberately bounded: unfinished
+// guest upload data is still removed automatically, rather than accumulating
+// indefinitely on a public share.
+const publicUploadCacheTTL = 30 * time.Minute
+
 // UploadCache is an interface for tracking active uploads.
 // Allows for different backends (e.g. in-memory or redis)
 // to support both single instance and multi replica deployments.
@@ -18,7 +24,7 @@ type UploadCache interface {
 	// the upload expires before completion, to delete the partial file; it must
 	// route through the uploading user's scoped filesystem so that eviction
 	// cannot follow a symlink out of the user's scope.
-	Register(filePath string, fileSize int64, remove func() error)
+	Register(filePath string, fileSize int64, remove func() error, ttl time.Duration)
 
 	// Complete removes an upload from the cache
 	Complete(filePath string)
@@ -26,8 +32,8 @@ type UploadCache interface {
 	// GetLength returns the expected file size for an active upload
 	GetLength(filePath string) (int64, error)
 
-	// Touch refreshes the TTL for an active upload
-	Touch(filePath string)
+	// Touch refreshes the TTL for an active upload.
+	Touch(filePath string, ttl time.Duration)
 
 	// Close cleans up any resources
 	Close()
@@ -65,8 +71,11 @@ func newMemoryUploadCache() *memoryUploadCache {
 	return &memoryUploadCache{cache: cache}
 }
 
-func (c *memoryUploadCache) Register(filePath string, fileSize int64, remove func() error) {
-	c.cache.Set(filePath, memoryUploadEntry{size: fileSize, remove: remove}, uploadCacheTTL)
+func (c *memoryUploadCache) Register(filePath string, fileSize int64, remove func() error, ttl time.Duration) {
+	if ttl <= 0 {
+		ttl = uploadCacheTTL
+	}
+	c.cache.Set(filePath, memoryUploadEntry{size: fileSize, remove: remove}, ttl)
 }
 
 func (c *memoryUploadCache) Complete(filePath string) {
@@ -81,7 +90,7 @@ func (c *memoryUploadCache) GetLength(filePath string) (int64, error) {
 	return item.Value().size, nil
 }
 
-func (c *memoryUploadCache) Touch(filePath string) {
+func (c *memoryUploadCache) Touch(filePath string, _ time.Duration) {
 	c.cache.Touch(filePath)
 }
 

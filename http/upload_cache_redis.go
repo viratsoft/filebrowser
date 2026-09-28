@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -41,8 +42,11 @@ func (c *redisUploadCache) filePathKey(filePath string) string {
 
 // Register stores the upload length. The scoped removal callback is unused by
 // the redis backend, which does not delete partial files on eviction.
-func (c *redisUploadCache) Register(filePath string, fileSize int64, _ func() error) {
-	err := c.client.Set(context.Background(), c.filePathKey(filePath), fileSize, uploadCacheTTL).Err()
+func (c *redisUploadCache) Register(filePath string, fileSize int64, _ func() error, ttl time.Duration) {
+	if ttl <= 0 {
+		ttl = uploadCacheTTL
+	}
+	err := c.client.Set(context.Background(), c.filePathKey(filePath), fileSize, ttl).Err()
 	if err != nil {
 		log.Printf("failed to register upload in redis cache: %v", err)
 	}
@@ -69,13 +73,14 @@ func (c *redisUploadCache) GetLength(filePath string) (int64, error) {
 		return 0, fmt.Errorf("invalid upload length in cache: %w", err)
 	}
 
-	c.Touch(filePath)
-
 	return size, nil
 }
 
-func (c *redisUploadCache) Touch(filePath string) {
-	err := c.client.Expire(context.Background(), c.filePathKey(filePath), uploadCacheTTL).Err()
+func (c *redisUploadCache) Touch(filePath string, ttl time.Duration) {
+	if ttl <= 0 {
+		ttl = uploadCacheTTL
+	}
+	err := c.client.Expire(context.Background(), c.filePathKey(filePath), ttl).Err()
 	if err != nil {
 		log.Printf("failed to touch upload in redis cache: %v", err)
 	}

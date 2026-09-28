@@ -34,7 +34,7 @@ func drainRequestBody(r *http.Request) {
 }
 
 // keepUploadActive periodically touches the cache entry to prevent eviction during transfer
-func keepUploadActive(cache UploadCache, filePath string) func() {
+func keepUploadActive(cache UploadCache, filePath string, ttl time.Duration) func() {
 	stop := make(chan bool)
 
 	go func() {
@@ -46,7 +46,7 @@ func keepUploadActive(cache UploadCache, filePath string) func() {
 			case <-stop:
 				return
 			case <-ticker.C:
-				cache.Touch(filePath)
+				cache.Touch(filePath, ttl)
 			}
 		}
 	}()
@@ -133,7 +133,7 @@ func tusPostHandler(cache UploadCache) handleFunc {
 		uploadPath := r.URL.Path
 		cache.Register(file.RealPath(), uploadLength, func() error {
 			return d.user.Fs.Remove(uploadPath)
-		})
+		}, uploadCacheTTL)
 
 		basePath := "/" + strings.Trim(strings.TrimSpace(d.server.BaseURL), "/")
 		if basePath == "/" {
@@ -228,7 +228,7 @@ func tusPatchUpload(w http.ResponseWriter, r *http.Request, d *data, cache Uploa
 	}
 
 	// Prevent the upload from being evicted during the transfer
-	stop := keepUploadActive(cache, file.RealPath())
+	stop := keepUploadActive(cache, file.RealPath(), uploadCacheTTL)
 	defer stop()
 
 	switch {

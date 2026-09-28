@@ -179,7 +179,7 @@ func publicTusPostHandler(cache UploadCache) handleFunc {
 				return http.StatusInternalServerError, err
 			}
 		}
-		cache.Register(upload.cacheKey, length, func() error { return d.user.Fs.Remove(upload.tempPath) })
+		cache.Register(upload.cacheKey, length, func() error { return d.user.Fs.Remove(upload.tempPath) }, publicUploadCacheTTL)
 		if length == 0 {
 			if err := d.user.Fs.Rename(upload.tempPath, upload.targetPath); err != nil {
 				return http.StatusInternalServerError, err
@@ -275,7 +275,7 @@ func publicTusPatchUpload(w http.ResponseWriter, r *http.Request, d *data, cache
 	if info.Size() != offset {
 		return http.StatusConflict, nil
 	}
-	stop := keepUploadActive(cache, upload.cacheKey)
+	stop := keepUploadActive(cache, upload.cacheKey, publicUploadCacheTTL)
 	defer stop()
 	file, err := d.user.Fs.OpenFile(upload.tempPath, os.O_WRONLY|os.O_APPEND, d.settings.FileMode)
 	if err != nil {

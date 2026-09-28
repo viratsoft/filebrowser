@@ -25,6 +25,13 @@ function completedPublicUpload(error: Error | tus.DetailedError) {
   );
 }
 
+function isMissingPublicUpload(error: Error | tus.DetailedError) {
+  return (
+    error instanceof tus.DetailedError &&
+    error.originalResponse?.getStatus() === 404
+  );
+}
+
 export async function fetch(url: string, password: string = "") {
   url = removePrefix(url);
 
@@ -113,57 +120,73 @@ export async function tusUpload(
     throw new Error("Resumable uploads are not supported by this browser");
   }
   const key = `${hash}:${name}:${content.size}:${content.lastModified}`;
-  const attemptID = publicUploadAttemptID();
   const endpoint = new URL(
     `${baseURL}/api/public/tus/${encodeURIComponent(hash)}/${encodeURIComponent(name)}`,
     origin
   );
   if (token) endpoint.searchParams.set("token", token);
   return new Promise<void>((resolve, reject) => {
-    const upload = new tus.Upload(content, {
-      endpoint: endpoint.toString(),
-      chunkSize: tusSettings.chunkSize,
-      retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
-      parallelUploads: 1,
-      storeFingerprintForResuming: true,
-      headers: {
-        [publicUploadAttemptHeader]: attemptID,
-        ...(password
-          ? { "X-SHARE-PASSWORD": encodeURIComponent(password) }
-          : {}),
-      },
-      onShouldRetry(error) {
-        const status = error.originalResponse?.getStatus() || 0;
-        return ![401, 403, 404, 409].includes(status);
-      },
-      onProgress(bytesUploaded) {
-        onupload({ loaded: bytesUploaded });
-      },
-      onError(error) {
-        delete publicUploads[key];
-        if (error.message === "Upload aborted") return reject(error);
-        if (completedPublicUpload(error)) {
-          return resolve();
-        }
-        const message =
-          error instanceof tus.DetailedError && error.originalResponse
-            ? error.originalResponse.getBody() || "Upload failed"
-            : "Upload failed";
-        reject(new Error(message));
-      },
-      onSuccess() {
-        delete publicUploads[key];
-        resolve();
-      },
-    });
-    publicUploads[key] = upload;
-    upload
-      .findPreviousUploads()
-      .then((previous) => {
-        if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
+    // A mobile browser can suspend long enough for an older server to discard
+    // its temporary TUS record. Restart that one transfer once from byte zero;
+    // the POST remains no-overwrite, so an actual existing file still reports a
+    // conflict instead of being overwritten or silently treated as success.
+    const startUpload = (resumePrevious: boolean, restarted = false) => {
+      const attemptID = publicUploadAttemptID();
+      const upload = new tus.Upload(content, {
+        endpoint: endpoint.toString(),
+        chunkSize: tusSettings.chunkSize,
+        retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
+        parallelUploads: 1,
+        storeFingerprintForResuming: true,
+        headers: {
+          [publicUploadAttemptHeader]: attemptID,
+          ...(password
+            ? { "X-SHARE-PASSWORD": encodeURIComponent(password) }
+            : {}),
+        },
+        onShouldRetry(error) {
+          const status = error.originalResponse?.getStatus() || 0;
+          return ![401, 403, 404, 409].includes(status);
+        },
+        onProgress(bytesUploaded) {
+          onupload({ loaded: bytesUploaded });
+        },
+        onError(error) {
+          delete publicUploads[key];
+          if (error.message === "Upload aborted") return reject(error);
+          if (completedPublicUpload(error)) {
+            return resolve();
+          }
+          if (!restarted && isMissingPublicUpload(error)) {
+            startUpload(false, true);
+            return;
+          }
+          const message =
+            error instanceof tus.DetailedError && error.originalResponse
+              ? error.originalResponse.getBody() || "Upload failed"
+              : "Upload failed";
+          reject(new Error(message));
+        },
+        onSuccess() {
+          delete publicUploads[key];
+          resolve();
+        },
+      });
+      publicUploads[key] = upload;
+      if (!resumePrevious) {
         upload.start();
-      })
-      .catch(reject);
+        return;
+      }
+      upload
+        .findPreviousUploads()
+        .then((previous) => {
+          if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
+          upload.start();
+        })
+        .catch(reject);
+    };
+
+    startUpload(true);
   });
 }
 
