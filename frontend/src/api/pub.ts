@@ -11,13 +11,17 @@ function publicUploadAttemptID() {
 
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    ""
+  );
 }
 
 function completedPublicUpload(error: Error | tus.DetailedError) {
   return (
     error instanceof tus.DetailedError &&
-    error.originalResponse?.getHeader("X-FileBrowser-Public-Upload-Complete") === "1"
+    error.originalResponse?.getHeader(
+      "X-FileBrowser-Public-Upload-Complete"
+    ) === "1"
   );
 }
 
@@ -97,30 +101,52 @@ export function getDownloadURL(res: Resource, inline = false) {
 
 // This endpoint is separate from authenticated /api/tus. Passwords are sent
 // on each request, but never stored by the resumable-upload fingerprint store.
-export async function tusUpload(hash: string, name: string, content: File, token: string, password: string, onupload: (event: { loaded: number }) => void) {
+export async function tusUpload(
+  hash: string,
+  name: string,
+  content: File,
+  token: string,
+  password: string,
+  onupload: (event: { loaded: number }) => void
+) {
   if (!tusSettings || !tus.isSupported) throw new Error("Resumable uploads are not supported by this browser");
   const key = `${hash}:${name}:${content.size}:${content.lastModified}`;
   const attemptID = publicUploadAttemptID();
-  const endpoint = new URL(`${baseURL}/api/public/tus/${encodeURIComponent(hash)}/${encodeURIComponent(name)}`, origin);
+  const endpoint = new URL(
+    `${baseURL}/api/public/tus/${encodeURIComponent(hash)}/${encodeURIComponent(name)}`,
+    origin
+  );
   if (token) endpoint.searchParams.set("token", token);
   return new Promise<void>((resolve, reject) => {
     const upload = new tus.Upload(content, {
-      endpoint: endpoint.toString(), chunkSize: tusSettings.chunkSize,
-      retryDelays: [0, 1000, 3000, 5000, 10000, 20000], parallelUploads: 1,
+      endpoint: endpoint.toString(),
+      chunkSize: tusSettings.chunkSize,
+      retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
+      parallelUploads: 1,
       storeFingerprintForResuming: true,
       headers: {
         [publicUploadAttemptHeader]: attemptID,
-        ...(password ? { "X-SHARE-PASSWORD": encodeURIComponent(password) } : {}),
+        ...(password
+          ? { "X-SHARE-PASSWORD": encodeURIComponent(password) }
+          : {}),
       },
-      onShouldRetry(error) { const status = error.originalResponse?.getStatus() || 0; return ![401, 403, 404, 409].includes(status); },
-      onProgress(bytesUploaded) { onupload({ loaded: bytesUploaded }); },
+      onShouldRetry(error) {
+        const status = error.originalResponse?.getStatus() || 0;
+        return ![401, 403, 404, 409].includes(status);
+      },
+      onProgress(bytesUploaded) {
+        onupload({ loaded: bytesUploaded });
+      },
       onError(error) {
         delete publicUploads[key];
         if (error.message === "Upload aborted") return reject(error);
         if (completedPublicUpload(error)) {
           return resolve();
         }
-        const message = error instanceof tus.DetailedError && error.originalResponse ? error.originalResponse.getBody() || "Upload failed" : "Upload failed";
+        const message =
+          error instanceof tus.DetailedError && error.originalResponse
+            ? error.originalResponse.getBody() || "Upload failed"
+            : "Upload failed";
         reject(new Error(message));
       },
       onSuccess() {
@@ -129,7 +155,13 @@ export async function tusUpload(hash: string, name: string, content: File, token
       },
     });
     publicUploads[key] = upload;
-    upload.findPreviousUploads().then((previous) => { if (previous.length) upload.resumeFromPreviousUpload(previous[0]); upload.start(); }).catch(reject);
+    upload
+      .findPreviousUploads()
+      .then((previous) => {
+        if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
+        upload.start();
+      })
+      .catch(reject);
   });
 }
 

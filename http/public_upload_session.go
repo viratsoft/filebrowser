@@ -174,7 +174,10 @@ func (s *uploadSessionStore) add(hash string, session uploadSession, file string
 	}
 	s.Lock()
 	defer s.Unlock()
-	if session.Folder == "" && stored := s.sessions[hash+":"+session.ID]; stored != nil && time.Now().Before(stored.expires) {
+	if session.Folder != "" {
+		return
+	}
+	if stored := s.sessions[hash+":"+session.ID]; stored != nil && time.Now().Before(stored.expires) {
 		stored.files[file] = struct{}{}
 	}
 }
