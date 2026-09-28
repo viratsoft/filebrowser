@@ -40,3 +40,17 @@ func TestMemoryUploadCacheEvictionUsesRemovalCallback(t *testing.T) {
 		t.Fatalf("file at the cache key was deleted, so eviction bypassed the callback (raw os.Remove?): %v", err)
 	}
 }
+
+func TestMemoryUploadCacheKeepsPublicResumeTTL(t *testing.T) {
+	c := newMemoryUploadCache()
+	t.Cleanup(c.Close)
+
+	c.Register("guest-upload", 1, nil, publicUploadCacheTTL)
+	item := c.cache.Get("guest-upload")
+	if item == nil {
+		t.Fatal("expected public upload to be registered")
+	}
+	if got := item.TTL(); got != publicUploadCacheTTL {
+		t.Fatalf("public upload TTL = %s, want %s", got, publicUploadCacheTTL)
+	}
+}
