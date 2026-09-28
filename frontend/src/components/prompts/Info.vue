@@ -32,25 +32,28 @@
           <strong>{{ $t("prompts.size") }}:</strong>
           <span v-if="folderSize !== null">{{ humanFolderSize }}</span>
           <button
-            v-if="folderSize === null"
+            v-if="folderSize === null && !loadingFolderSize"
             class="button button--flat button--small"
             type="button"
-            :disabled="loadingFolderSize"
             @click="loadFolderSize"
           >
-            {{ loadingFolderSize ? $t("prompts.calculatingSize") : $t("prompts.calculateSize") }}
+            {{ $t("prompts.calculateSize") }}
           </button>
           <button
             v-else
-            class="button button--flat button--small folder-size-refresh"
+            class="button button--flat button--small folder-size-refresh folder-size-icon-button"
             type="button"
             :disabled="loadingFolderSize"
             :title="$t('prompts.refreshSize')"
             :aria-label="$t('prompts.refreshSize')"
             @click="loadFolderSize"
           >
-            <i class="material-icons" aria-hidden="true">refresh</i>
-            <span>{{ loadingFolderSize ? $t("prompts.calculatingSize") : $t("prompts.refreshSize") }}</span>
+            <i
+              class="material-icons"
+              :class="{ spin: loadingFolderSize }"
+              aria-hidden="true"
+              >{{ loadingFolderSize ? "autorenew" : "refresh" }}</i
+            >
           </button>
         </p>
         <p>
@@ -269,5 +272,11 @@ export default {
 
 .folder-size-refresh .material-icons {
   font-size: 1rem;
+}
+
+.folder-size-icon-button {
+  min-width: 2rem;
+  padding: 0;
+  justify-content: center;
 }
 </style>
