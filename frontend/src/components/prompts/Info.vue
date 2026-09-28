@@ -32,18 +32,25 @@
           <strong>{{ $t("prompts.size") }}:</strong>
           <span v-if="folderSize !== null">{{ humanFolderSize }}</span>
           <button
+            v-if="folderSize === null"
             class="button button--flat button--small"
             type="button"
             :disabled="loadingFolderSize"
             @click="loadFolderSize"
           >
-            {{
-              loadingFolderSize
-                ? $t("prompts.calculatingSize")
-                : folderSize === null
-                  ? $t("prompts.calculateSize")
-                  : $t("buttons.refresh")
-            }}
+            {{ loadingFolderSize ? $t("prompts.calculatingSize") : $t("prompts.calculateSize") }}
+          </button>
+          <button
+            v-else
+            class="button button--flat button--small folder-size-refresh"
+            type="button"
+            :disabled="loadingFolderSize"
+            :title="$t('prompts.refreshSize')"
+            :aria-label="$t('prompts.refreshSize')"
+            @click="loadFolderSize"
+          >
+            <i class="material-icons" aria-hidden="true">refresh</i>
+            <span>{{ loadingFolderSize ? $t("prompts.calculatingSize") : $t("prompts.refreshSize") }}</span>
           </button>
         </p>
         <p>
@@ -252,5 +259,15 @@ export default {
   min-height: 2rem;
   padding: 0 0.55rem;
   font-size: 0.85rem;
+}
+
+.folder-size-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.folder-size-refresh .material-icons {
+  font-size: 1rem;
 }
 </style>
