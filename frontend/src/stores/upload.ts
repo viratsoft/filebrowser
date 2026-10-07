@@ -160,10 +160,12 @@ export const useUploadStore = defineStore("upload", () => {
           succeeded = false;
           if (err.message === "Upload aborted") return;
 
-          // A public share never overwrites an existing file. Turn the
-          // expected 409 response into a useful, local message without
-          // exposing any server-side path information.
-          if (upload.publicShare && /^409(?:\s|$)/.test(err.message)) {
+          // Offset mismatches and unfinished transfers also return 409.
+          // Only a confirmed filename conflict gets the existing-file toast.
+          if (
+            upload.publicShare &&
+            publicApi.isPublicUploadFileExistsError(err)
+          ) {
             $showError(
               `File already exists: ${upload.name}`,
               false,

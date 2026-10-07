@@ -2,6 +2,12 @@ import { fetchURL, removePrefix, createURL } from "./utils";
 import { baseURL } from "@/utils/constants";
 import * as tus from "tus-js-client";
 import { origin, tusSettings } from "@/utils/constants";
+import {
+  publicUploadConflictError,
+  publicUploadConflictHeader,
+} from "./public-upload-conflict";
+
+export { isPublicUploadFileExistsError } from "./public-upload-conflict";
 
 const publicUploads: Record<string, tus.Upload> = {};
 const publicUploadAttemptHeader = "X-FileBrowser-Public-Upload-ID";
@@ -160,6 +166,13 @@ export async function tusUpload(
           if (!restarted && isMissingPublicUpload(error)) {
             startUpload(false, true);
             return;
+          }
+          if (error instanceof tus.DetailedError && error.originalResponse) {
+            const conflict = publicUploadConflictError(
+              error.originalResponse.getStatus(),
+              error.originalResponse.getHeader(publicUploadConflictHeader) || ""
+            );
+            if (conflict) return reject(conflict);
           }
           const message =
             error instanceof tus.DetailedError && error.originalResponse

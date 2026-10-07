@@ -353,6 +353,71 @@ func TestPublicTusCompletedAttemptRecoversWithoutMaskingConflicts(t *testing.T) 
 	}
 }
 
+func TestPublicTusConflictReasons(t *testing.T) {
+	for _, password := range []string{"", "secret"} {
+		t.Run("password="+password, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(root, "shared"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true, Create: true}, []byte("test-signing-key"))
+			link := &share.Link{Hash: "conflict-reasons", UserID: 1, Path: "/shared", AllowUpload: true, UploadOnly: true}
+			if password != "" {
+				hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+				if err != nil {
+					t.Fatal(err)
+				}
+				link.PasswordHash = string(hash)
+			}
+			if err := st.Share.Save(link); err != nil {
+				t.Fatal(err)
+			}
+			cache := newMemoryUploadCache()
+			post := handle(publicTusPostHandler(cache), "/api/public/tus/", st, &settings.Server{})
+			patch := handle(publicTusPatchHandler(cache), "/api/public/tus/", st, &settings.Server{})
+			head := handle(publicTusHeadHandler(cache), "/api/public/tus/", st, &settings.Server{})
+			var cookies []*http.Cookie
+			request := func(handler http.Handler, method, filename, offset, body string) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(method, "/api/public/tus/conflict-reasons/"+filename, strings.NewReader(body))
+				req.Header.Set("Upload-Length", "6")
+				req.Header.Set("Content-Type", "application/offset+octet-stream")
+				req.Header.Set("Upload-Offset", offset)
+				req.Header.Set("X-SHARE-PASSWORD", password)
+				for _, cookie := range cookies {
+					req.AddCookie(cookie)
+				}
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, req)
+				if len(rec.Result().Cookies()) > 0 {
+					cookies = rec.Result().Cookies()
+				}
+				return rec
+			}
+			checkConflict := func(rec *httptest.ResponseRecorder, reason string) {
+				t.Helper()
+				if rec.Code != http.StatusConflict || rec.Header().Get(publicUploadConflictHeader) != reason {
+					t.Fatalf("expected 409 %s, got status=%d headers=%v", reason, rec.Code, rec.Header())
+				}
+			}
+			if rec := request(post, http.MethodPost, "report.txt", "0", ""); rec.Code != http.StatusCreated {
+				t.Fatalf("create failed: %d %s", rec.Code, rec.Body.String())
+			}
+			checkConflict(request(post, http.MethodPost, "report.txt", "0", ""), "upload_in_progress")
+			if rec := request(patch, http.MethodPatch, "report.txt", "0", "ab"); rec.Code != http.StatusNoContent {
+				t.Fatalf("partial upload failed: %d", rec.Code)
+			}
+			checkConflict(request(patch, http.MethodPatch, "report.txt", "0", "cd"), "offset_mismatch")
+			if rec := request(head, http.MethodHead, "report.txt", "0", ""); rec.Code != http.StatusOK || rec.Header().Get("Upload-Offset") != "2" {
+				t.Fatalf("offset conflict changed transfer: status=%d headers=%v", rec.Code, rec.Header())
+			}
+			if err := os.WriteFile(filepath.Join(root, "shared", "existing.txt"), []byte("keep"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			checkConflict(request(post, http.MethodPost, "existing.txt", "0", ""), "file_exists")
+		})
+	}
+}
+
 func TestUploadOnlyFileShareIsRejected(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("private"), 0o644); err != nil {
