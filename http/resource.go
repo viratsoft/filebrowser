@@ -86,7 +86,8 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 })
 
 type resourceSizeResponse struct {
-	Size int64 `json:"size"`
+	Size     int64 `json:"size"`
+	NumFiles int64 `json:"numFiles"`
 }
 
 // resourceSizeHandler is intentionally separate from listing: recursively
@@ -104,32 +105,14 @@ var resourceSizeHandler = withUser(func(w http.ResponseWriter, r *http.Request, 
 		return http.StatusForbidden, nil
 	}
 
-	var size int64
-	err = afero.Walk(d.user.Fs, rootPath, func(currentPath string, info os.FileInfo, err error) error {
-		if contextErr := r.Context().Err(); contextErr != nil {
-			return contextErr
-		}
-		if err != nil {
-			return nil
-		}
-		if !d.Check(currentPath) {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !info.IsDir() {
-			size += info.Size()
-		}
-		return nil
-	})
+	details, err := scanFolderDetails(r.Context(), d.user.Fs, rootPath, d.Check)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return 0, err
 		}
 		return http.StatusInternalServerError, err
 	}
-	return renderJSON(w, r, resourceSizeResponse{Size: size})
+	return renderJSON(w, r, details)
 })
 
 func resourceDeleteHandler(fileCache FileCache) handleFunc {

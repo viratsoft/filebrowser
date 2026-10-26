@@ -28,24 +28,42 @@
       </p>
 
       <template v-if="dir && selected.length === 0">
-        <p class="folder-size">
-          <strong>{{ $t("prompts.size") }}:</strong>
-          <span v-if="folderSize !== null">{{ humanFolderSize }}</span>
+        <p>
+          <strong>{{ $t("prompts.numberFiles") }}:</strong> {{ req.numFiles }}
+        </p>
+        <p>
+          <strong>{{ $t("prompts.numberDirs") }}:</strong> {{ req.numDirs }}
+        </p>
+      </template>
+
+      <section
+        v-if="folderPath"
+        class="folder-details"
+        :aria-busy="loadingFolderSize"
+      >
+        <div class="folder-details-heading">
+          <strong class="folder-details-title"
+            >{{ $t("prompts.folderDetails", { name: name || "/" }) }}:</strong
+          >
           <button
-            v-if="folderSize === null && !loadingFolderSize"
+            v-if="folderDetails === null && !loadingFolderSize"
             class="button button--flat button--small"
             type="button"
             @click="loadFolderSize"
           >
-            {{ $t("prompts.calculateSize") }}
+            {{ $t("prompts.calculateFolderDetails") }}
           </button>
           <button
             v-else
             class="button button--flat button--small folder-size-refresh folder-size-icon-button"
             type="button"
             :disabled="loadingFolderSize"
-            :title="$t('prompts.refreshSize')"
-            :aria-label="$t('prompts.refreshSize')"
+            :title="$t('prompts.refreshFolderDetails')"
+            :aria-label="
+              loadingFolderSize
+                ? $t('prompts.calculatingSize')
+                : $t('prompts.refreshFolderDetails')
+            "
             @click="loadFolderSize"
           >
             <i
@@ -55,14 +73,22 @@
               >{{ loadingFolderSize ? "autorenew" : "refresh" }}</i
             >
           </button>
-        </p>
-        <p>
-          <strong>{{ $t("prompts.numberFiles") }}:</strong> {{ req.numFiles }}
-        </p>
-        <p>
-          <strong>{{ $t("prompts.numberDirs") }}:</strong> {{ req.numDirs }}
-        </p>
-      </template>
+        </div>
+        <div
+          v-if="folderDetails !== null"
+          class="folder-details-values"
+          aria-live="polite"
+        >
+          <span
+            ><strong>{{ $t("prompts.size") }}:</strong>
+            {{ humanFolderSize }}</span
+          >
+          <span
+            ><strong>{{ $t("prompts.totalFiles") }}:</strong>
+            {{ folderDetails.numFiles }}</span
+          >
+        </div>
+      </section>
 
       <template v-if="!dir">
         <p>
@@ -140,15 +166,25 @@ export default {
   inject: ["$showError"],
   data: function () {
     return {
-      folderSize: null,
+      folderDetails: null,
       loadingFolderSize: false,
+      folderDetailsRequest: 0,
+      folderDetailsAbort: null,
     };
   },
   watch: {
-    "$route.path": function () {
-      this.folderSize = null;
+    folderPath: function () {
+      this.folderDetailsRequest++;
+      this.folderDetailsAbort?.abort();
+      this.folderDetailsAbort = null;
+      this.folderDetails = null;
       this.loadingFolderSize = false;
     },
+  },
+  beforeUnmount() {
+    this.folderDetailsRequest++;
+    this.folderDetailsAbort?.abort();
+    this.folderDetailsAbort = null;
   },
   computed: {
     ...mapState(useFileStore, [
@@ -171,7 +207,15 @@ export default {
       return filesize(sum);
     },
     humanFolderSize: function () {
-      return this.folderSize === null ? "" : filesize(this.folderSize);
+      return this.folderDetails === null
+        ? ""
+        : filesize(this.folderDetails.size);
+    },
+    folderPath: function () {
+      if (!this.dir || this.selectedCount > 1) return null;
+      return this.selectedCount === 0
+        ? this.$route.path
+        : this.req.items[this.selected[0]].url;
     },
     humanTime: function () {
       if (this.selectedCount === 0) {
@@ -218,14 +262,32 @@ export default {
     ...mapActions(useLayoutStore, ["closeHovers"]),
     /** @type {() => Promise<void>} */
     loadFolderSize: async function () {
-      if (this.loadingFolderSize) return;
+      if (this.loadingFolderSize || !this.folderPath) return;
+      const folderPath = this.folderPath;
+      const request = ++this.folderDetailsRequest;
+      const controller = new AbortController();
+      this.folderDetailsAbort = controller;
       this.loadingFolderSize = true;
       try {
-        this.folderSize = await api.folderSize(this.$route.path);
+        const details = await api.folderDetails(folderPath, controller.signal);
+        if (
+          request === this.folderDetailsRequest &&
+          folderPath === this.folderPath
+        ) {
+          this.folderDetails = details;
+        }
       } catch (e) {
-        this.$showError(e);
+        if (
+          request === this.folderDetailsRequest &&
+          folderPath === this.folderPath
+        ) {
+          this.$showError(e);
+        }
       } finally {
-        this.loadingFolderSize = false;
+        if (request === this.folderDetailsRequest) {
+          this.loadingFolderSize = false;
+          this.folderDetailsAbort = null;
+        }
       }
     },
     checksum: async function (event, algo) {
@@ -251,11 +313,29 @@ export default {
 </script>
 
 <style scoped>
-.folder-size {
+.folder-details {
+  border-top: 1px solid var(--divider);
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+}
+
+.folder-details-heading {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+.folder-details-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.folder-details-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.5rem;
 }
 
 .button--small {
