@@ -43,7 +43,7 @@
       >
         <div class="folder-details-heading">
           <strong class="folder-details-title"
-            >{{ $t("prompts.folderDetails", { name: name || "/" }) }}:</strong
+            >{{ $t("prompts.folderDetails") }}:</strong
           >
           <button
             v-if="folderDetails === null && !loadingFolderSize"

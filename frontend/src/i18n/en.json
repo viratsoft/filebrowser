@@ -144,7 +144,7 @@
     "error": "Something went wrong",
     "fileInfo": "File information",
     "calculateSize": "Calculate size",
-    "folderDetails": "{name} Folder Details",
+    "folderDetails": "Folder Details",
     "calculateFolderDetails": "Calculate",
     "refreshFolderDetails": "Refresh folder details",
     "totalFiles": "Total files",
