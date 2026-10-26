@@ -25,11 +25,19 @@ func scanFolderDetails(ctx context.Context, afs afero.Fs, root string, check fun
 		pending = pending[:len(pending)-1]
 		dir, err := afs.Open(current)
 		if err != nil {
+			if current != root && isFolderReadError(err) {
+				result.Incomplete = true
+				continue
+			}
 			return result, err
 		}
 		err = readFolderDetails(ctx, dir, current, check, &result, &pending)
 		closeErr := dir.Close()
 		if err != nil {
+			if isFolderReadError(err) {
+				result.Incomplete = true
+				continue
+			}
 			return result, err
 		}
 		if closeErr != nil {
@@ -39,15 +47,21 @@ func scanFolderDetails(ctx context.Context, afs afero.Fs, root string, check fun
 	return result, nil
 }
 
+// A concurrent delete, mount failure or unreadable descendant must not throw
+// away all the readable totals. Never call such a result complete, and never
+// include the failed server-side path in the response. Root-open errors still
+// propagate so a wholly inaccessible target gets its proper 403/404 status.
+func isFolderReadError(err error) bool {
+	var pathError *os.PathError
+	return errors.As(err, &pathError) || errors.Is(err, os.ErrPermission) || errors.Is(err, os.ErrNotExist)
+}
+
 func readFolderDetails(ctx context.Context, dir afero.File, current string, check func(string) bool, result *resourceSizeResponse, pending *[]string) error {
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		entries, err := dir.Readdir(256)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return err
-		}
+		entries, readErr := dir.Readdir(256)
 		for _, entry := range entries {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -63,7 +77,12 @@ func readFolderDetails(ctx context.Context, dir afero.File, current string, chec
 				result.NumFiles++
 			}
 		}
-		if errors.Is(err, io.EOF) || len(entries) == 0 {
+		// Readdir may return valid entries together with an error. Preserve
+		// those entries before handling the error; the caller marks it partial.
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return readErr
+		}
+		if errors.Is(readErr, io.EOF) || len(entries) == 0 {
 			return nil
 		}
 	}

@@ -80,14 +80,37 @@
           aria-live="polite"
         >
           <span
-            ><strong>{{ $t("prompts.size") }}:</strong>
+            ><strong
+              >{{
+                $t(
+                  folderDetails.incomplete
+                    ? "prompts.partialSize"
+                    : "prompts.size"
+                )
+              }}:</strong
+            >
             {{ humanFolderSize }}</span
           >
           <span
-            ><strong>{{ $t("prompts.totalFiles") }}:</strong>
+            ><strong
+              >{{
+                $t(
+                  folderDetails.incomplete
+                    ? "prompts.partialFiles"
+                    : "prompts.totalFiles"
+                )
+              }}:</strong
+            >
             {{ folderDetails.numFiles }}</span
           >
         </div>
+        <p
+          v-if="folderDetails?.incomplete"
+          class="folder-details-warning"
+          role="status"
+        >
+          {{ $t("prompts.folderDetailsIncomplete") }}
+        </p>
       </section>
 
       <template v-if="!dir">
@@ -336,6 +359,13 @@ export default {
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
   margin-top: 0.5rem;
+}
+
+.folder-details-warning {
+  color: var(--textSecondary);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0.5rem 0 0;
 }
 
 .button--small {

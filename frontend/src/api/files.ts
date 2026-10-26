@@ -58,10 +58,14 @@ export async function fetchAll(url: string): Promise<RecursiveEntry[]> {
 export async function folderDetails(
   url: string,
   signal?: AbortSignal
-): Promise<{ size: number; numFiles: number }> {
+): Promise<{ size: number; numFiles: number; incomplete?: boolean }> {
   url = removePrefix(url);
   const res = await fetchURL(`/api/resources/size${url}`, { signal });
-  return (await res.json()) as { size: number; numFiles: number };
+  return (await res.json()) as {
+    size: number;
+    numFiles: number;
+    incomplete?: boolean;
+  };
 }
 
 export async function folderSize(url: string): Promise<number> {

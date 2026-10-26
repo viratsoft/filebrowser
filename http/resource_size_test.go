@@ -28,6 +28,83 @@ func (f *folderDetailsCountingFs) Stat(name string) (os.FileInfo, error) {
 	return f.Fs.Stat(name)
 }
 
+type folderDetailsErrorFs struct {
+	afero.Fs
+	openPath string
+	openErr  error
+	readErr  error
+}
+
+func (f *folderDetailsErrorFs) Open(name string) (afero.File, error) {
+	if f.openErr != nil && filepath.Clean(name) == filepath.Clean(f.openPath) {
+		return nil, f.openErr
+	}
+	file, err := f.Fs.Open(name)
+	if err == nil && f.readErr != nil {
+		return &folderDetailsErrorFile{File: file, err: f.readErr}, nil
+	}
+	return file, err
+}
+
+type folderDetailsErrorFile struct {
+	afero.File
+	err error
+}
+
+func (f *folderDetailsErrorFile) Readdir(count int) ([]os.FileInfo, error) {
+	entries, err := f.File.Readdir(count)
+	if err != nil && len(entries) == 0 {
+		return entries, err
+	}
+	return entries, f.err
+}
+
+func TestFolderDetailsScanMarksUnreadableDescendantsPartial(t *testing.T) {
+	base := afero.NewMemMapFs()
+	if err := base.MkdirAll("/target/unreadable", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := afero.WriteFile(base, "/target/normal.txt", []byte("abc"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := afero.WriteFile(base, "/target/unreadable/missing.txt", []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, cause := range []error{os.ErrPermission, os.ErrNotExist, errors.New("mount unavailable")} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			failed := &folderDetailsErrorFs{Fs: base, openPath: "/target/unreadable", openErr: &os.PathError{Op: "open", Path: "/target/unreadable", Err: cause}}
+			result, err := scanFolderDetails(context.Background(), failed, "/target", func(string) bool { return true })
+			if err != nil || result.Size != 3 || result.NumFiles != 1 || !result.Incomplete {
+				t.Fatalf("partial result=%+v err=%v", result, err)
+			}
+			// Root access errors are not disguised as a successful partial result.
+			failed.openPath = "/target"
+			if _, err := scanFolderDetails(context.Background(), failed, "/target", func(string) bool { return true }); !errors.Is(err, cause) {
+				t.Fatalf("expected root error %v, got %v", cause, err)
+			}
+		})
+	}
+}
+
+func TestFolderDetailsScanPreservesEntriesReturnedWithReadError(t *testing.T) {
+	base := afero.NewMemMapFs()
+	if err := base.MkdirAll("/target", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := afero.WriteFile(base, "/target/normal.txt", []byte("abc"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failed := &folderDetailsErrorFs{Fs: base, readErr: os.ErrPermission}
+	result, err := scanFolderDetails(context.Background(), failed, "/target", func(string) bool { return true })
+	if err != nil || result.Size != 3 || result.NumFiles != 1 || !result.Incomplete {
+		t.Fatalf("read-error result=%+v err=%v", result, err)
+	}
+	failed.readErr = errors.New("unexpected internal failure")
+	if _, err := scanFolderDetails(context.Background(), failed, "/target", func(string) bool { return true }); err == nil {
+		t.Fatal("unexpected internal errors must not be hidden")
+	}
+}
+
 func TestFolderDetailsScanBatchesWithoutPerFileStat(t *testing.T) {
 	base := afero.NewMemMapFs()
 	if err := base.MkdirAll("/target/nested", 0o755); err != nil {
@@ -40,7 +117,7 @@ func TestFolderDetailsScanBatchesWithoutPerFileStat(t *testing.T) {
 	}
 	counting := &folderDetailsCountingFs{Fs: base}
 	result, err := scanFolderDetails(context.Background(), counting, "/target", func(string) bool { return true })
-	if err != nil || result.Size != 1800 || result.NumFiles != 600 {
+	if err != nil || result.Size != 1800 || result.NumFiles != 600 || result.Incomplete {
 		t.Fatalf("batch result=%+v err=%v", result, err)
 	}
 	if counting.stats != 0 {

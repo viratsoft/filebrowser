@@ -60,6 +60,19 @@ describe("on-demand folder details", () => {
     expect(value.folderDetails).toEqual({ size: 0, numFiles: 0 });
   });
 
+  it("preserves the incomplete flag and clears it after a successful refresh", async () => {
+    vi.mocked(api.folderDetails)
+      .mockResolvedValueOnce({ size: 100, numFiles: 2, incomplete: true })
+      .mockResolvedValueOnce({ size: 300, numFiles: 5 });
+    const value = context();
+    await load(value);
+    expect(value.folderDetails.incomplete).toBe(true);
+    expect(value.$showError).not.toHaveBeenCalled();
+    await load(value);
+    expect(value.folderDetails).toEqual({ size: 300, numFiles: 5 });
+    expect(value.folderDetails.incomplete).toBeUndefined();
+  });
+
   it("ignores stale results after the folder changes", async () => {
     let finish!: (value: { size: number; numFiles: number }) => void;
     vi.mocked(api.folderDetails).mockReturnValue(

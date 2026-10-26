@@ -86,8 +86,9 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 })
 
 type resourceSizeResponse struct {
-	Size     int64 `json:"size"`
-	NumFiles int64 `json:"numFiles"`
+	Size       int64 `json:"size"`
+	NumFiles   int64 `json:"numFiles"`
+	Incomplete bool  `json:"incomplete,omitempty"`
 }
 
 // resourceSizeHandler is intentionally separate from listing: recursively
@@ -110,7 +111,7 @@ var resourceSizeHandler = withUser(func(w http.ResponseWriter, r *http.Request, 
 		if r.Context().Err() != nil {
 			return 0, err
 		}
-		return http.StatusInternalServerError, err
+		return errToStatus(err), err
 	}
 	return renderJSON(w, r, details)
 })
