@@ -21,6 +21,15 @@ export const useFileStore = defineStore("file", {
   }),
   getters: {
     selectedCount: (state) => state.selected.length,
+    allItemsSelected: (state) => {
+      const items = state.req?.isDir ? state.req.items : [];
+      if (!items?.length) return false;
+      const selected = new Set(state.selected);
+      return (
+        selected.size === items.length &&
+        items.every((_, index) => selected.has(index))
+      );
+    },
     // route: () => {
     //   const routerStore = useRouterStore();
     //   return routerStore.router.currentRoute;
@@ -37,6 +46,13 @@ export const useFileStore = defineStore("file", {
     // no context as first argument, use `this` instead
     toggleMultiple() {
       this.multiple = !this.multiple;
+    },
+    toggleAllSelection() {
+      if (!this.isListing || !this.req?.items?.length) return;
+      this.multiple = true;
+      this.selected = this.allItemsSelected
+        ? []
+        : this.req.items.map((_, index) => index);
     },
     updateRequest(value: Resource | null) {
       const selectedItems = this.selected.map((i) => this.req?.items[i]);

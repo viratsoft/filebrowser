@@ -10,6 +10,8 @@
         @action="openSearch()"
       />
 
+      <select-all-button />
+
       <template #actions>
         <template v-if="!isMobile">
           <action
@@ -355,6 +357,7 @@ import { Base64 } from "js-base64";
 
 import HeaderBar from "@/components/header/HeaderBar.vue";
 import Action from "@/components/header/Action.vue";
+import SelectAllButton from "@/components/header/SelectAllButton.vue";
 import Search from "@/components/Search.vue";
 import Item from "@/components/files/ListingItem.vue";
 import ContextMenu from "@/components/ContextMenu.vue";
@@ -1128,5 +1131,14 @@ const handleEmptyAreaClick = (e: MouseEvent) => {
 
 .file-selection-margin-bottom {
   margin-bottom: 3.5rem;
+}
+
+/* Leave room for the extra action on smaller desktop/tablet headers without
+   changing the mobile search overlay or other pages' header layout. */
+@media (min-width: 737px) {
+  :deep(header #search:not(.active)) {
+    flex-shrink: 1;
+    min-width: 0;
+  }
 }
 </style>

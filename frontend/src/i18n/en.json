@@ -36,6 +36,8 @@
     "search": "Search",
     "select": "Select",
     "selectMultiple": "Select multiple",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
     "share": "Share",
     "shell": "Toggle shell",
     "submit": "Submit",
