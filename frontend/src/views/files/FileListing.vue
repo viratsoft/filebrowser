@@ -1140,5 +1140,9 @@ const handleEmptyAreaClick = (e: MouseEvent) => {
     flex-shrink: 1;
     min-width: 0;
   }
+
+  :deep(header #search:not(.active) input) {
+    min-width: 0;
+  }
 }
 </style>
