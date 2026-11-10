@@ -24,7 +24,21 @@
   >
     <div>
       <img
-        v-if="!readOnly && type === 'image' && isThumbsEnabled"
+        v-if="
+          readOnly &&
+          type === 'image' &&
+          publicThumbnailUrl &&
+          !publicThumbnailFailed
+        "
+        :src="publicThumbnailUrl"
+        :alt="name"
+        loading="lazy"
+        decoding="async"
+        referrerpolicy="no-referrer"
+        @error="publicThumbnailFailed = true"
+      />
+      <img
+        v-else-if="!readOnly && type === 'image' && isThumbsEnabled"
         v-lazy="thumbnailUrl"
         :alt="name"
       />
@@ -54,7 +68,7 @@ import { filesize } from "@/utils";
 import dayjs from "dayjs";
 import { files as api } from "@/api";
 import * as upload from "@/utils/upload";
-import { computed, inject, ref } from "vue";
+import { computed, inject, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 const touches = ref<number>(0);
@@ -78,7 +92,16 @@ const props = defineProps<{
   index: number;
   readOnly?: boolean;
   path?: string;
+  publicThumbnailUrl?: string;
 }>();
+
+const publicThumbnailFailed = ref(false);
+watch(
+  () => props.publicThumbnailUrl,
+  () => {
+    publicThumbnailFailed.value = false;
+  }
+);
 
 const authStore = useAuthStore();
 const fileStore = useFileStore();

@@ -217,6 +217,10 @@
     "video": "Video"
   },
   "settings": {
+    "sharedLinkAppearance": "Shared link appearance",
+    "showShareThumbnails": "Show thumbnails on my shared links",
+    "shareThumbnailsHint": "Show image thumbnails to visitors on your shared links. Upload-only links never show previews. Requires server thumbnails to be enabled.",
+    "sharePreferencesLoadFailed": "Could not load this setting. Reload the page to try again.",
     "aceEditorTheme": "Ace editor theme",
     "admin": "Admin",
     "administrator": "Administrator",

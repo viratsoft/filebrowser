@@ -286,6 +286,11 @@
               v-bind:modified="item.modified"
               v-bind:type="item.type"
               v-bind:size="item.size"
+              :public-thumbnail-url="
+                req.showThumbnails && !isUploadOnly && item.type === 'image'
+                  ? api.getThumbnailURL(hash, item.path, item.modified, token)
+                  : undefined
+              "
               readOnly
             >
             </item>

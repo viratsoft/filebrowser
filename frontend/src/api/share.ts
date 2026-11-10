@@ -13,6 +13,17 @@ export async function capabilities() {
   return fetchJSON<{ matchFolderOwner: boolean }>("/api/share/capabilities");
 }
 
+export async function preferences() {
+  return fetchJSON<{ showThumbnails: boolean }>("/api/shares/preferences", {});
+}
+
+export async function updatePreferences(showThumbnails: boolean) {
+  return fetchJSON<{ showThumbnails: boolean }>("/api/shares/preferences", {
+    method: "PUT",
+    body: JSON.stringify({ showThumbnails }),
+  });
+}
+
 export async function remove(hash: string) {
   await fetchURL(`/api/share/${hash}`, {
     method: "DELETE",

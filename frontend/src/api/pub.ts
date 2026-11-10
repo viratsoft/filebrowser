@@ -112,6 +112,19 @@ export function getDownloadURL(res: Resource, inline = false) {
   return createURL("api/public/dl/" + res.hash + res.path, params);
 }
 
+export function getThumbnailURL(
+  hash: string,
+  path: string,
+  modified: string,
+  token = ""
+) {
+  const relativePath = path.startsWith("/") ? path : `/${path}`;
+  return createURL(`api/public/thumb/${hash}${relativePath}`, {
+    v: modified,
+    ...(token && { token }),
+  });
+}
+
 // This endpoint is separate from authenticated /api/tus. Passwords are sent
 // on each request, but never stored by the resumable-upload fingerprint store.
 export async function tusUpload(

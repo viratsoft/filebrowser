@@ -34,8 +34,10 @@ type User struct {
 	Fs                    afero.Fs      `json:"-" yaml:"-"`
 	Rules                 []rules.Rule  `json:"rules"`
 	HideDotfiles          bool          `json:"hideDotfiles"`
-	DateFormat            bool          `json:"dateFormat"`
-	AceEditorTheme        string        `json:"aceEditorTheme"`
+	// Inverted so existing database records default to enabled thumbnails.
+	HideShareThumbnails bool   `json:"hideShareThumbnails"`
+	DateFormat          bool   `json:"dateFormat"`
+	AceEditorTheme      string `json:"aceEditorTheme"`
 }
 
 // GetRules implements rules.Provider.

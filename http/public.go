@@ -18,6 +18,12 @@ import (
 )
 
 var withHashFile = func(fn handleFunc) handleFunc {
+	return withHashFileOptions(fn, true)
+}
+
+// Thumbnail reads only need metadata, not directory listings, subtitles or
+// file-content type expansion. All authorization and scope checks stay shared.
+func withHashFileOptions(fn handleFunc, expand bool) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		id, ifPath := ifPathWithName(r)
 		link, err := d.store.Share.GetByHash(id)
@@ -102,7 +108,7 @@ var withHashFile = func(fn handleFunc) handleFunc {
 			Fs:      d.user.Fs,
 			Path:    filePath,
 			Modify:  d.user.Perm.Modify,
-			Expand:  true,
+			Expand:  expand,
 			Checker: d,
 			Token:   link.Token,
 		})
@@ -110,7 +116,7 @@ var withHashFile = func(fn handleFunc) handleFunc {
 			return errToStatus(err), err
 		}
 
-		if file.IsDir {
+		if file.IsDir && expand {
 			// Do not leak resumable-upload temporary files from regular readable
 			// shares while an upload is still in progress.
 			items := file.Items[:0]
@@ -198,9 +204,12 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 
 	return renderJSON(w, r, struct {
 		*files.FileInfo
-		AllowUpload bool `json:"allowUpload"`
-		UploadOnly  bool `json:"uploadOnly"`
-	}{FileInfo: file, AllowUpload: d.rawShare.AllowUpload, UploadOnly: d.rawShare.UploadOnly})
+		AllowUpload    bool `json:"allowUpload"`
+		UploadOnly     bool `json:"uploadOnly"`
+		ShowThumbnails bool `json:"showThumbnails"`
+	}{FileInfo: file, AllowUpload: d.rawShare.AllowUpload, UploadOnly: d.rawShare.UploadOnly,
+		ShowThumbnails: d.server.EnableThumbnails && !d.user.HideShareThumbnails && !d.rawShare.UploadOnly &&
+			(d.rawShare.PasswordHash == "" || d.rawShare.Token != "")})
 })
 
 // publicUploadHandler accepts a new file at the root of an upload-enabled

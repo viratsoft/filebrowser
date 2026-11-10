@@ -77,6 +77,7 @@ func NewHandler(
 
 	api.Handle("/shares", monkey(shareListHandler, "")).Methods("GET")
 	api.Handle("/share/capabilities", monkey(shareCapabilitiesHandler, "")).Methods("GET")
+	api.Handle("/shares/preferences", monkey(sharePreferencesHandler, ""))
 	api.PathPrefix("/share").Handler(monkey(shareGetsHandler, "/api/share")).Methods("GET")
 	api.PathPrefix("/share").Handler(monkey(sharePostHandler, "/api/share")).Methods("POST")
 	api.PathPrefix("/share").Handler(monkey(shareDeleteHandler, "/api/share")).Methods("DELETE")
@@ -92,6 +93,7 @@ func NewHandler(
 	api.PathPrefix("/subtitle").Handler(monkey(subtitleHandler, "/api/subtitle")).Methods("GET")
 
 	public := api.PathPrefix("/public").Subrouter()
+	public.PathPrefix("/thumb/").Handler(monkey(publicThumbnailHandler(imgSvc, fileCache), "/api/public/thumb/")).Methods("GET")
 	public.PathPrefix("/dl").Handler(monkey(publicDlHandler, "/api/public/dl/")).Methods("GET")
 	public.PathPrefix("/tus").Handler(monkey(publicTusPostHandler(uploadCache), "/api/public/tus/")).Methods("POST")
 	public.PathPrefix("/tus").Handler(monkey(publicTusHeadHandler(uploadCache), "/api/public/tus/")).Methods("HEAD", "GET")

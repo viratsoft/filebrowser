@@ -2,6 +2,41 @@
   <errors v-if="error" :errorCode="error.status" />
   <div class="row" v-else-if="!layoutStore.loading">
     <div class="column">
+      <form class="card" @submit.prevent="savePreferences">
+        <div class="card-title">
+          <h2>{{ t("settings.sharedLinkAppearance") }}</h2>
+        </div>
+        <div class="card-content">
+          <label class="share-thumbnail-option">
+            <input
+              type="checkbox"
+              aria-describedby="share-thumbnails-hint"
+              v-model="showThumbnails"
+              :disabled="
+                loadingPreferences || savingPreferences || preferencesFailed
+              "
+            />
+            <span>{{ t("settings.showShareThumbnails") }}</span>
+          </label>
+          <p class="share-thumbnail-hint" id="share-thumbnails-hint">
+            {{ t("settings.shareThumbnailsHint") }}
+          </p>
+          <p v-if="preferencesFailed" role="alert">
+            {{ t("settings.sharePreferencesLoadFailed") }}
+          </p>
+        </div>
+        <div class="card-action">
+          <button
+            class="button button--flat"
+            type="submit"
+            :disabled="
+              loadingPreferences || savingPreferences || preferencesFailed
+            "
+          >
+            {{ t("buttons.save") }}
+          </button>
+        </div>
+      </form>
       <div class="card">
         <div class="card-title">
           <h2>{{ t("settings.shareManagement") }}</h2>
@@ -84,6 +119,41 @@ const authStore = useAuthStore();
 
 const error = ref<StatusError | null>(null);
 const links = ref<Share[]>([]);
+const showThumbnails = ref(true);
+const loadingPreferences = ref(true);
+const savingPreferences = ref(false);
+const preferencesFailed = ref(false);
+
+onMounted(async () => {
+  try {
+    showThumbnails.value = (await api.preferences()).showThumbnails;
+  } catch (err) {
+    preferencesFailed.value = true;
+    $showError(err as Error);
+  } finally {
+    loadingPreferences.value = false;
+  }
+});
+
+const savePreferences = async () => {
+  if (
+    loadingPreferences.value ||
+    savingPreferences.value ||
+    preferencesFailed.value
+  )
+    return;
+  savingPreferences.value = true;
+  try {
+    showThumbnails.value = (
+      await api.updatePreferences(showThumbnails.value)
+    ).showThumbnails;
+    $showSuccess(t("settings.settingsUpdated"));
+  } catch (err) {
+    $showError(err as Error);
+  } finally {
+    savingPreferences.value = false;
+  }
+};
 
 onMounted(async () => {
   layoutStore.loading = true;
@@ -159,3 +229,21 @@ const buildLink = (share: Share) => {
   return api.getShareURL(share);
 };
 </script>
+
+<style scoped>
+.share-thumbnail-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+.share-thumbnail-option input {
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+.share-thumbnail-hint {
+  color: var(--textPrimary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 0;
+}
+</style>
