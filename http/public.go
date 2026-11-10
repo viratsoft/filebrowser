@@ -204,12 +204,14 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 
 	return renderJSON(w, r, struct {
 		*files.FileInfo
-		AllowUpload    bool `json:"allowUpload"`
-		UploadOnly     bool `json:"uploadOnly"`
-		ShowThumbnails bool `json:"showThumbnails"`
+		AllowUpload       bool `json:"allowUpload"`
+		UploadOnly        bool `json:"uploadOnly"`
+		ShowThumbnails    bool `json:"showThumbnails"`
+		AllowImagePreview bool `json:"allowImagePreview"`
 	}{FileInfo: file, AllowUpload: d.rawShare.AllowUpload, UploadOnly: d.rawShare.UploadOnly,
 		ShowThumbnails: d.server.EnableThumbnails && !d.user.HideShareThumbnails && !d.rawShare.UploadOnly &&
-			(d.rawShare.PasswordHash == "" || d.rawShare.Token != "")})
+			(d.rawShare.PasswordHash == "" || d.rawShare.Token != ""),
+		AllowImagePreview: d.server.ResizePreview && !d.rawShare.UploadOnly})
 })
 
 // publicUploadHandler accepts a new file at the root of an upload-enabled

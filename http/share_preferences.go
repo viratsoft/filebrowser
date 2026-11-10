@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/filebrowser/filebrowser/v2/users"
 )
@@ -11,6 +12,10 @@ import (
 type sharePreferencesResponse struct {
 	ShowThumbnails bool `json:"showThumbnails"`
 }
+
+// Serialize preference writes with generic user updates, which may carry an
+// older snapshot of the user from another tab or an older client.
+var sharePreferencesWriteMu sync.Mutex
 
 // Match this exact path for every method so unsupported requests cannot fall
 // through to the legacy /share path-prefix create/delete handlers.
@@ -44,6 +49,8 @@ var sharePreferencesPutHandler = withPermShare(func(w http.ResponseWriter, r *ht
 	if err := decoder.Decode(new(interface{})); err != io.EOF {
 		return http.StatusBadRequest, nil
 	}
+	sharePreferencesWriteMu.Lock()
+	defer sharePreferencesWriteMu.Unlock()
 	err := d.store.Users.Update(&users.User{ID: d.user.ID, HideShareThumbnails: !*body.ShowThumbnails}, "HideShareThumbnails")
 	if err != nil {
 		return errToStatus(err), err

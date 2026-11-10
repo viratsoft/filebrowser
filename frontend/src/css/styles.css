@@ -216,6 +216,17 @@ main .spinner .bounce2 {
   height: 100%;
 }
 
+/* Keep the image's full fitted viewport stable when the toolbar hides.
+   Other media retain their existing layout and touch controls. */
+#previewer.image-gallery {
+  height: 100dvh;
+}
+
+#previewer .preview.image-gallery-viewport {
+  box-sizing: border-box;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 #previewer .preview pre {
   text-align: left;
   overflow: auto;

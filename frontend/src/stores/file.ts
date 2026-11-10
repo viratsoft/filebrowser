@@ -47,8 +47,15 @@ export const useFileStore = defineStore("file", {
     toggleMultiple() {
       this.multiple = !this.multiple;
     },
-    toggleAllSelection() {
-      if (!this.isListing || !this.req?.items?.length) return;
+    toggleAllSelection(publicShare = false) {
+      const publicListing =
+        publicShare && this.req?.isDir && !this.req.uploadOnly;
+      if (
+        (!this.isListing && !publicListing) ||
+        this.req?.uploadOnly ||
+        !this.req?.items?.length
+      )
+        return;
       this.multiple = true;
       this.selected = this.allItemsSelected
         ? []

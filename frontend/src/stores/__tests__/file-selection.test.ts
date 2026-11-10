@@ -74,6 +74,18 @@ describe("select all in the current listing", () => {
     expect(store.multiple).toBe(false);
   });
 
+  it("allows an explicit readable-share selection including offscreen items, but never upload-only", () => {
+    const store = listing(155);
+    store.isFiles = false;
+    store.toggleAllSelection(true);
+    expect(store.selected).toHaveLength(155);
+    store.toggleAllSelection(true);
+    expect(store.selected).toEqual([]);
+    store.req!.uploadOnly = true;
+    store.toggleAllSelection(true);
+    expect(store.selected).toEqual([]);
+  });
+
   it("handles a single item and resets normally when leaving the listing", () => {
     const store = listing(1);
     store.toggleAllSelection();

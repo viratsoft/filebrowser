@@ -3,8 +3,11 @@ package fbhttp
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
+	"hash/crc32"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"image/png"
 	"net/http"
@@ -20,8 +23,160 @@ import (
 	"github.com/filebrowser/filebrowser/v2/settings"
 	"github.com/filebrowser/filebrowser/v2/share"
 	"github.com/filebrowser/filebrowser/v2/users"
+	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func TestGenericUserSavePreservesPrivateShareThumbnailPreference(t *testing.T) {
+	key := []byte("preserve-thumbnail-preference")
+	perm := users.Permissions{Admin: true, Share: true, Download: true}
+	st := scopedUserStorage(t, t.TempDir(), perm, key)
+	stale, err := st.Users.Get("", false, uint(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale.Password = ""
+	if err := st.Users.Update(&users.User{ID: 1, HideShareThumbnails: true}, "HideShareThumbnails"); err != nil {
+		t.Fatal(err)
+	}
+	requestBody, err := json.Marshal(modifyUserRequest{
+		modifyRequest: modifyRequest{What: "user", Which: []string{"all"}}, Data: stale,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/users/1", bytes.NewReader(requestBody))
+	req = mux.SetURLVars(req, map[string]string{"id": "1"})
+	req.Header.Set("X-Auth", signToken(t, perm, key))
+	rec := httptest.NewRecorder()
+	handle(userPutHandler, "", st, &settings.Server{}).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("user save: %d %s", rec.Code, rec.Body.String())
+	}
+	stored, err := st.Users.Get("", false, uint(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stored.HideShareThumbnails {
+		t.Fatal("generic user save re-enabled public thumbnails")
+	}
+}
+
+func TestPublicThumbnailCacheDoesNotReuseReplacedImageWithSameMetadata(t *testing.T) {
+	root := t.TempDir()
+	filename := filepath.Join(root, "photo.png")
+	writePhoto := func(c color.RGBA) {
+		t.Helper()
+		photo := image.NewRGBA(image.Rect(0, 0, 4, 4))
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				photo.SetRGBA(x, y, c)
+			}
+		}
+		var encoded bytes.Buffer
+		if err := png.Encode(&encoded, photo); err != nil {
+			t.Fatal(err)
+		}
+		// PNG permits trailing data. Keep the byte length identical for both versions.
+		padded := make([]byte, 4096)
+		copy(padded, encoded.Bytes())
+		if err := os.WriteFile(filename, padded, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writePhoto(color.RGBA{R: 255, A: 255})
+	stamp := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(filename, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	key := []byte("same-metadata-cache")
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true}, key)
+	if err := st.Share.Save(&share.Link{Hash: "photo-share", Path: "/", UserID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	cache := &publicThumbnailTestCache{data: map[string][]byte{}}
+	handler := handle(publicThumbnailHandler(img.New(1), cache), "/api/public/thumb/", st, &settings.Server{EnableThumbnails: true})
+	request := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/public/thumb/photo-share/photo.png", nil)
+		req.Header.Set("If-Modified-Since", stamp.Format(http.TimeFormat))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("thumbnail: %d %s", rec.Code, rec.Body.String())
+		}
+		if rec.Header().Get("Last-Modified") != "" {
+			t.Fatal("mtime-only HTTP validator permits stale pixels")
+		}
+		return rec
+	}
+	before := request().Body.Bytes()
+	writePhoto(color.RGBA{B: 255, A: 255})
+	if err := os.Chtimes(filename, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	after := request().Body.Bytes()
+	if bytes.Equal(before, after) {
+		t.Fatal("replacement image reused the previous thumbnail")
+	}
+	if len(cache.data) != 2 {
+		t.Fatalf("expected two content versions, got %d", len(cache.data))
+	}
+	if !bytes.Equal(after, request().Body.Bytes()) || len(cache.data) != 2 {
+		t.Fatal("unchanged content did not reuse its thumbnail")
+	}
+}
+
+func TestPublicThumbnailSourceReadIsBoundedAndCancelable(t *testing.T) {
+	root := t.TempDir()
+	file, err := os.Create(filepath.Join(root, "oversized.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = file.Truncate(maxPublicThumbnailSourceBytes + 1)
+	closeErr := file.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true}, []byte("bounded-thumbnail"))
+	if err := st.Share.Save(&share.Link{Hash: "large-share", Path: "/", UserID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	cache := &publicThumbnailTestCache{data: map[string][]byte{}}
+	rec := httptest.NewRecorder()
+	handle(publicThumbnailHandler(img.New(1), cache), "/api/public/thumb/", st, &settings.Server{EnableThumbnails: true}).ServeHTTP(rec,
+		httptest.NewRequest(http.MethodGet, "/api/public/thumb/large-share/oversized.png", nil))
+	if rec.Code != http.StatusRequestEntityTooLarge || len(cache.data) != 0 {
+		t.Fatalf("oversized image was read/cached: %d", rec.Code)
+	}
+	// A valid PNG header can advertise enormous dimensions in just 33 bytes.
+	// Reject it before a full decoder attempts to allocate its pixel buffer.
+	header := make([]byte, 33)
+	copy(header, "\x89PNG\r\n\x1a\n")
+	binary.BigEndian.PutUint32(header[8:12], 13)
+	copy(header[12:16], "IHDR")
+	binary.BigEndian.PutUint32(header[16:20], 6000)
+	binary.BigEndian.PutUint32(header[20:24], 6000)
+	header[24], header[25] = 8, 2
+	binary.BigEndian.PutUint32(header[29:33], crc32.ChecksumIEEE(header[12:29]))
+	if err := os.WriteFile(filepath.Join(root, "huge-pixels.png"), header, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	large := httptest.NewRecorder()
+	handle(publicThumbnailHandler(img.New(1), cache), "/api/public/thumb/", st, &settings.Server{EnableThumbnails: true}).ServeHTTP(large,
+		httptest.NewRequest(http.MethodGet, "/api/public/thumb/large-share/huge-pixels.png", nil))
+	if large.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("pixel allocation not bounded: %d", large.Code)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := publicThumbnailSourceReader{ctx: ctx, reader: strings.NewReader("private image")}
+	if n, err := r.Read(make([]byte, 32)); n != 0 || err != context.Canceled {
+		t.Fatalf("canceled source read returned %d, %v", n, err)
+	}
+}
 
 type publicThumbnailTestCache struct{ data map[string][]byte }
 
@@ -52,8 +207,10 @@ func TestPublicThumbnailsHonorSharePrivacyAndPreferences(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(root, "shared", "unsafe.svg"), []byte(`<svg onload="alert(1)"></svg>`), 0o600); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"unsafe.svg", "spoofed.png"} {
+		if err := os.WriteFile(filepath.Join(root, "shared", name), []byte(`<svg onload="alert(1)"></svg>`), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	key := []byte("thumbnail-test-key")
 	perm := users.Permissions{Share: true, Download: true, Create: true}
@@ -142,12 +299,21 @@ func TestPublicThumbnailsHonorSharePrivacyAndPreferences(t *testing.T) {
 	if len(cache.data) == 0 {
 		t.Fatal("thumbnail was not internally cached")
 	}
+	oldToken := link.Token
+	link.Token = "rotated-thumbnail-token"
+	if err := st.Share.Save(link); err != nil {
+		t.Fatal(err)
+	}
+	if rec := request("photo.png", oldToken, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("old token reused a cached thumbnail: %d", rec.Code)
+	}
+	checkImage(request("photo.png", link.Token, ""))
 	if err := os.Symlink(filepath.Join(root, "secret.png"), filepath.Join(root, "shared", "outside.png")); err == nil {
 		if rec := request("outside.png", link.Token, ""); rec.Code != http.StatusForbidden {
 			t.Fatalf("symlink escaped share scope: %d", rec.Code)
 		}
 	}
-	for path, status := range map[string]int{"": 404, "denied.png": 403, ".filebrowser-upload-private.png": 404, "../secret.png": 404, "unsafe.svg": 415} {
+	for path, status := range map[string]int{"": 404, "denied.png": 403, ".filebrowser-upload-private.png": 404, "../secret.png": 404, "unsafe.svg": 415, "spoofed.png": 415} {
 		if rec := request(path, link.Token, ""); rec.Code != status {
 			t.Fatalf("path %q got %d want %d", path, rec.Code, status)
 		}
@@ -203,6 +369,9 @@ func TestShareThumbnailPreferenceDefaultsAndPersistsWithoutChangingUser(t *testi
 	key := []byte("preference-key")
 	perm := users.Permissions{Share: true, Download: true}
 	st := scopedUserStorage(t, t.TempDir(), perm, key)
+	if err := st.Users.Save(&users.User{ID: 2, Username: "other", Password: "pw", Perm: perm, HideShareThumbnails: true}); err != nil {
+		t.Fatal(err)
+	}
 	get := handle(sharePreferencesGetHandler, "", st, &settings.Server{})
 	put := handle(sharePreferencesPutHandler, "", st, &settings.Server{})
 	request := func(handler http.Handler, method, body string, authenticated bool) *httptest.ResponseRecorder {
@@ -250,6 +419,13 @@ func TestShareThumbnailPreferenceDefaultsAndPersistsWithoutChangingUser(t *testi
 			t.Fatalf("save preference: %d %s", rec.Code, rec.Body.String())
 		}
 		check(enabled)
+		other, err := st.Users.Get("", false, uint(2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !other.HideShareThumbnails {
+			t.Fatal("preference update changed another owner")
+		}
 		after, err := st.Users.Get("", false, uint(1))
 		if err != nil {
 			t.Fatal(err)

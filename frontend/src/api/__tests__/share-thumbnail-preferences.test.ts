@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as shares from "../share";
 import * as publicApi from "../pub";
-import { createURL, fetchJSON } from "../utils";
+import { createURL, fetchJSON, fetchURL } from "../utils";
 
 vi.mock("../utils", () => ({
   fetchURL: vi.fn(),
@@ -17,6 +17,42 @@ vi.mock("@/utils/constants", () => ({
 vi.mock("tus-js-client", () => ({}));
 
 describe("share thumbnail preferences and URLs", () => {
+  it("uses a distinct public viewer preview URL with only the share token", () => {
+    publicApi.getImagePreviewURL({
+      hash: "hash",
+      path: "/photo #1.png",
+      modified: "modified",
+      token: "share-token",
+    } as Resource);
+    expect(createURL).toHaveBeenCalledWith(
+      "api/public/preview/hash/photo #1.png",
+      { v: "modified", token: "share-token" }
+    );
+  });
+
+  it("authenticates a legacy original image through a password header, not a URL", async () => {
+    const blob = new Blob(["image"]);
+    vi.mocked(fetchURL).mockResolvedValue({
+      blob: async () => blob,
+    } as Response);
+    const controller = new AbortController();
+    expect(
+      await publicApi.fetchImage(
+        { hash: "hash", path: "/photo #1.png" } as Resource,
+        true,
+        "p& secret",
+        controller.signal
+      )
+    ).toBe(blob);
+    expect(fetchURL).toHaveBeenCalledWith(
+      "/api/public/dl/hash/photo%20%231.png?inline=true",
+      {
+        signal: controller.signal,
+        headers: { "X-SHARE-PASSWORD": "p%26%20secret" },
+      },
+      false
+    );
+  });
   beforeEach(() => vi.clearAllMocks());
 
   it("loads preferences using a route that cannot collide with a shared folder path", async () => {

@@ -1,7 +1,35 @@
 <template>
   <div>
+    <public-media-preview
+      v-if="
+        loadedShare &&
+        !error &&
+        !galleryClosed &&
+        req &&
+        !isUploadOnly &&
+        !req.isDir &&
+        ['image', 'video', 'audio'].includes(req.type)
+      "
+      :file="req"
+      :password="password"
+      v-model:original="originalImage"
+      @close="closeGallery"
+    />
     <header-bar showMenu showLogo>
       <title />
+      <action
+        v-if="
+          loadedShare &&
+          galleryClosed &&
+          req &&
+          !isUploadOnly &&
+          !req.isDir &&
+          ['image', 'video', 'audio'].includes(req.type)
+        "
+        icon="fullscreen"
+        :label="t('sidebar.preview')"
+        @action="galleryClosed = false"
+      />
 
       <action
         v-if="fileStore.selectedCount && !isUploadOnly"
@@ -24,6 +52,10 @@
         icon="upload"
         :label="t('buttons.upload')"
         @action="openUpload"
+      />
+      <select-all-button
+        v-if="req?.isDir && !isUploadOnly && !error && !layoutStore.loading"
+        public-share
       />
       <action
         v-if="!isUploadOnly"
@@ -119,7 +151,10 @@
             <strong>{{ $t("prompts.lastModified") }}:</strong> {{ humanTime }}
           </div>
           <div class="share__box__element" style="height: 3em">
-            <strong>{{ $t("prompts.size") }}:</strong> {{ humanSize }}
+            <strong
+              >{{ $t(req.isDir ? "files.files" : "prompts.size") }}:</strong
+            >
+            {{ humanSize }}
           </div>
           <div class="share__box__element share__box__center">
             <a
@@ -167,8 +202,10 @@
             style="padding: 0em !important; height: 12em !important"
           >
             <a
-              target="_blank"
-              :href="raw"
+              :href="req.items[fileStore.selected[0]]?.url"
+              @click.prevent="
+                router.push({ path: req.items[fileStore.selected[0]].url })
+              "
               class="button button--flat"
               v-if="
                 !fileStore.multiple &&
@@ -179,7 +216,7 @@
             >
               <img
                 style="height: 12em"
-                :src="raw"
+                :src="selectedImageSource"
                 :alt="req.items[fileStore.selected[0]].name"
               />
             </a>
@@ -266,7 +303,9 @@
             <span>{{ t("files.files") }}</span>
             <span class="share-list-stats" aria-live="polite">
               <span v-if="req.numFiles > 0" class="share-list-stat">
-                <i class="material-icons" aria-hidden="true">insert_drive_file</i>
+                <i class="material-icons" aria-hidden="true"
+                  >insert_drive_file</i
+                >
                 {{ req.numFiles }} {{ t("files.files") }}
               </span>
               <span v-if="req.numDirs > 0" class="share-list-stat">
@@ -322,16 +361,30 @@
             </div>
           </div>
           <div v-else id="listing" class="list file-icons upload-only-list">
-            <div v-for="item in req.items.slice(0, showLimit)" :key="base64(item.name)" class="item upload-only-item">
+            <div
+              v-for="item in req.items.slice(0, showLimit)"
+              :key="base64(item.name)"
+              class="item upload-only-item"
+            >
               <div><i class="material-icons">insert_drive_file</i></div>
               <div>
                 <p class="name">{{ item.name }}</p>
                 <p class="size">{{ filesize(item.size) }}</p>
-                <p class="modified"><time :datetime="item.modified">{{ dayjs(item.modified).fromNow() }}</time></p>
+                <p class="modified">
+                  <time :datetime="item.modified">{{
+                    dayjs(item.modified).fromNow()
+                  }}</time>
+                </p>
               </div>
             </div>
-            <div v-if="req.items.length > showLimit" class="item" @click="showLimit += 100">
-              <div><p class="name">+ {{ req.items.length - showLimit }}</p></div>
+            <div
+              v-if="req.items.length > showLimit"
+              class="item"
+              @click="showLimit += 100"
+            >
+              <div>
+                <p class="name">+ {{ req.items.length - showLimit }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -357,14 +410,18 @@ import { Base64 } from "js-base64";
 import { createURL } from "@/api/utils";
 import HeaderBar from "@/components/header/HeaderBar.vue";
 import Action from "@/components/header/Action.vue";
+import SelectAllButton from "@/components/header/SelectAllButton.vue";
 import Breadcrumbs from "@/components/Breadcrumbs.vue";
 import Errors from "@/views/Errors.vue";
 import QrcodeVue from "qrcode.vue";
 import Item from "@/components/files/ListingItem.vue";
+import PublicMediaPreview from "@/components/files/PublicMediaPreview.vue";
+import urlUtils from "@/utils/url";
+import { name as appName } from "@/utils/constants";
 import { useFileStore } from "@/stores/file";
 import { useLayoutStore } from "@/stores/layout";
 import { computed, inject, onMounted, onBeforeUnmount, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { StatusError } from "@/api/utils";
 import { copy } from "@/utils/clipboard";
@@ -379,6 +436,12 @@ const token = ref<string>("");
 const audio = ref<HTMLAudioElement>();
 const tag = ref<boolean>(false);
 const uploadInput = ref<HTMLInputElement>();
+const originalImage = ref(false);
+const galleryClosed = ref(false);
+const loadedShare = ref(false);
+let fetchController: AbortController | null = null;
+let fetchGeneration = 0;
+let disposed = false;
 
 const $showError = inject<IToastError>("$showError")!;
 const $showSuccess = inject<IToastSuccess>("$showSuccess")!;
@@ -386,6 +449,7 @@ const $showSuccess = inject<IToastSuccess>("$showSuccess")!;
 const { t } = useI18n({});
 
 const route = useRoute();
+const router = useRouter();
 const fileStore = useFileStore();
 const layoutStore = useLayoutStore();
 const uploadStore = useUploadStore();
@@ -420,6 +484,17 @@ const raw = computed(() => {
 const inlineLink = computed(() =>
   req.value ? api.getDownloadURL(req.value, true) : ""
 );
+const selectedImageSource = computed(() => {
+  const item = req.value?.items?.[fileStore.selected[0]];
+  if (!req.value || !item || isUploadOnly.value) return "";
+  return !originalImage.value && req.value.allowImagePreview
+    ? api.getImagePreviewURL({
+        ...req.value,
+        hash: hash.value,
+        path: item.path,
+      })
+    : raw.value;
+});
 const humanSize = computed(() => {
   if (req.value) {
     return req.value.isDir
@@ -448,6 +523,23 @@ const play = () => {
   }
 };
 const fetchData = async () => {
+  if (disposed) return;
+  const generation = ++fetchGeneration;
+  fetchController?.abort();
+  const controller = new AbortController();
+  fetchController = controller;
+  const routePath = route.path;
+  const parts = route.params.path;
+  const shareHash = Array.isArray(parts)
+    ? parts[0]
+    : String(parts || "").split("/")[0];
+  if (hash.value && hash.value !== shareHash) {
+    password.value = "";
+    token.value = "";
+    attemptedPasswordLogin.value = false;
+    loadedShare.value = false;
+  }
+  hash.value = shareHash || "";
   fileStore.reload = false;
   fileStore.selected = [];
   fileStore.multiple = false;
@@ -465,21 +557,41 @@ const fetchData = async () => {
   if (url[0] !== "/") url = "/" + url;
 
   try {
-    const file = await api.fetch(url, password.value);
-    file.hash = hash.value;
+    const file = await api.fetch(url, password.value, controller.signal);
+    if (disposed || generation !== fetchGeneration || route.path !== routePath)
+      return;
+    file.hash = shareHash;
 
     token.value = file.token || "";
 
     fileStore.updateRequest(file);
-    document.title = `${file.name} - ${document.title}`;
+    galleryClosed.value = false;
+    loadedShare.value = true;
+    document.title = `${file.name} - ${t("buttons.share")} - ${appName}`;
   } catch (err) {
+    if (disposed || generation !== fetchGeneration || controller.signal.aborted)
+      return;
     if (err instanceof Error) {
       error.value = err;
     }
   } finally {
-    layoutStore.loading = false;
+    if (!disposed && generation === fetchGeneration) {
+      layoutStore.loading = false;
+      fetchController = null;
+    }
   }
 };
+
+function closeGallery() {
+  galleryClosed.value = true;
+  if (route.path.split("/").filter(Boolean).length > 2) {
+    void router
+      .push({ path: urlUtils.removeLastDir(route.path) })
+      .catch((error) =>
+        $showError(error instanceof Error ? error : String(error))
+      );
+  }
+}
 
 const keyEvent = (event: KeyboardEvent) => {
   if (event.key === "Escape") {
@@ -511,13 +623,19 @@ const uploadFiles = async (event: Event) => {
   (event.target as HTMLInputElement).value = "";
 };
 
-watch(() => fileStore.reload, (reload) => {
-  if (reload && route.name === "Share") fetchData();
-});
+watch(
+  () => fileStore.reload,
+  (reload) => {
+    if (reload && route.name === "Share") fetchData();
+  }
+);
 
-watch(() => uploadStore.publicUploadRevision, (revision) => {
-  if (revision > 0 && route.name === "Share") fetchData();
-});
+watch(
+  () => uploadStore.publicUploadRevision,
+  (revision) => {
+    if (revision > 0 && route.name === "Share") fetchData();
+  }
+);
 
 const isSingleFile = () =>
   fileStore.selectedCount === 1 &&
@@ -590,12 +708,14 @@ const copyToClipboard = (text: string) => {
 
 onMounted(async () => {
   // Created
-  hash.value = route.params.path[0];
   window.addEventListener("keydown", keyEvent);
   await fetchData();
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
+  fetchGeneration++;
+  fetchController?.abort();
   // Destroyed
   window.removeEventListener("keydown", keyEvent);
 });
@@ -614,7 +734,7 @@ onBeforeUnmount(() => {
   align-items: center;
   border-bottom: 1px solid var(--borderPrimary);
   display: flex;
-  gap: .75rem;
+  gap: 0.75rem;
   justify-content: space-between;
   position: sticky;
   top: 0;
@@ -627,16 +747,16 @@ onBeforeUnmount(() => {
   color: var(--textSecondary);
   display: inline-flex;
   flex-wrap: wrap;
-  font-size: .78em;
+  font-size: 0.78em;
   font-weight: normal;
-  gap: .6rem;
+  gap: 0.6rem;
   justify-content: flex-end;
 }
 
 .share-list-stat {
   align-items: center;
   display: inline-flex;
-  gap: .22rem;
+  gap: 0.22rem;
   white-space: nowrap;
 }
 

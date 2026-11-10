@@ -21,6 +21,7 @@ interface Resource extends ResourceBase {
   allowUpload?: boolean;
   uploadOnly?: boolean;
   showThumbnails?: boolean;
+  allowImagePreview?: boolean;
   index: number;
   subtitles?: string[];
   content?: string;

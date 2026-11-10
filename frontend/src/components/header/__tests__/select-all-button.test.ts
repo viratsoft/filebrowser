@@ -13,8 +13,8 @@ vi.mock("vue-i18n", () => ({
   }),
 }));
 
-function setup(count = 3) {
-  const app = createSSRApp(SelectAllButton);
+function setup(count = 3, publicShare = false) {
+  const app = createSSRApp(SelectAllButton, { publicShare });
   const pinia = createPinia();
   app.use(pinia);
   const files = useFileStore(pinia);
@@ -28,6 +28,16 @@ function setup(count = 3) {
 }
 
 describe("select-all icon button", () => {
+  it("uses the same icon on a readable share but hides it for upload-only shares", async () => {
+    const { app, files } = setup(155, true);
+    files.isFiles = false;
+    expect(await renderToString(app)).toContain("select_all");
+    files.toggleAllSelection(true);
+    expect(files.selected).toHaveLength(155);
+    expect(await renderToString(app)).toContain(">deselect</i>");
+    files.req!.uploadOnly = true;
+    expect(await renderToString(app)).not.toContain("<button");
+  });
   it("renders a native accessible icon button without the overflow menu", async () => {
     const { app } = setup();
     const html = await renderToString(app);

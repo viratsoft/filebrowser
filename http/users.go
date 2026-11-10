@@ -260,6 +260,18 @@ var userPutHandler = withSelfOrAdmin(func(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	sharePreferencesWriteMu.Lock()
+	defer sharePreferencesWriteMu.Unlock()
+	if len(req.Which) == 0 {
+		stored, loadErr := d.store.Users.Get(d.server.Root, d.server.FollowExternalSymlinks, req.Data.ID)
+		if loadErr != nil {
+			return errToStatus(loadErr), loadErr
+		}
+		// The generic editor has no share-thumbnail control. In particular, an
+		// older client omits this field and would silently re-enable thumbnails.
+		// Explicit field updates and the dedicated preferences endpoint still work.
+		req.Data.HideShareThumbnails = stored.HideShareThumbnails
+	}
 	err = d.store.Users.Update(req.Data, req.Which...)
 	if err != nil {
 		return http.StatusInternalServerError, err

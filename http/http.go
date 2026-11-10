@@ -93,6 +93,7 @@ func NewHandler(
 	api.PathPrefix("/subtitle").Handler(monkey(subtitleHandler, "/api/subtitle")).Methods("GET")
 
 	public := api.PathPrefix("/public").Subrouter()
+	public.PathPrefix("/preview/").Handler(monkey(publicPreviewHandler(imgSvc, fileCache), "/api/public/preview/")).Methods("GET")
 	public.PathPrefix("/thumb/").Handler(monkey(publicThumbnailHandler(imgSvc, fileCache), "/api/public/thumb/")).Methods("GET")
 	public.PathPrefix("/dl").Handler(monkey(publicDlHandler, "/api/public/dl/")).Methods("GET")
 	public.PathPrefix("/tus").Handler(monkey(publicTusPostHandler(uploadCache), "/api/public/tus/")).Methods("POST")

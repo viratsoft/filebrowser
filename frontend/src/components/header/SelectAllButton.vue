@@ -1,6 +1,6 @@
 <template>
   <button
-    v-if="fileStore.isListing && fileStore.req?.items?.length"
+    v-if="canSelect && fileStore.req?.items?.length"
     type="button"
     class="action select-all-action"
     :disabled="layoutStore.loading"
@@ -24,13 +24,19 @@ import { useLayoutStore } from "@/stores/layout";
 const fileStore = useFileStore();
 const layoutStore = useLayoutStore();
 const { t } = useI18n();
+const props = defineProps<{ publicShare?: boolean }>();
+const canSelect = computed(
+  () =>
+    !fileStore.req?.uploadOnly &&
+    (fileStore.isListing || (props.publicShare && fileStore.req?.isDir))
+);
 const label = computed(() =>
   t(fileStore.allItemsSelected ? "buttons.deselectAll" : "buttons.selectAll")
 );
 
 function toggleSelection() {
   if (layoutStore.loading) return;
-  fileStore.toggleAllSelection();
+  fileStore.toggleAllSelection(props.publicShare);
 }
 </script>
 

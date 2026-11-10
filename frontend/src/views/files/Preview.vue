@@ -1,10 +1,11 @@
 <template>
   <div
     id="previewer"
+    :class="{ 'image-gallery': fileStore.req?.type === 'image' }"
     @touchmove.prevent.stop
     @wheel.prevent.stop
-    @mousemove="toggleNavigation"
-    @touchstart="toggleNavigation"
+    @mousemove="revealNavigation"
+    @touchstart="revealNavigation"
   >
     <header-bar v-if="isPdf || isEpub || isCsv || showNav">
       <action icon="close" :label="$t('buttons.close')" @action="close()" />
@@ -73,7 +74,10 @@
       </div>
     </div>
     <template v-else>
-      <div class="preview">
+      <div
+        class="preview"
+        :class="{ 'image-gallery-viewport': fileStore.req?.type === 'image' }"
+      >
         <div v-if="isEpub" class="epub-reader">
           <vue-reader
             :location="location"
@@ -106,7 +110,14 @@
         <CsvViewer v-else-if="isCsv" :content="csvContent" :error="csvError" />
         <ExtendedImage
           v-else-if="fileStore.req?.type == 'image'"
+          :key="fileStore.req?.path"
           :src="previewUrl"
+          :alt="name"
+          :can-go-next="hasNext && !layoutStore.loading"
+          :can-go-previous="hasPrevious && !layoutStore.loading"
+          @next="next"
+          @previous="prev"
+          @tap="toggleGalleryNavigation"
         />
         <audio
           v-else-if="fileStore.req?.type == 'audio'"
@@ -254,6 +265,10 @@ const mediaTypes: ResourceType[] = ["image", "video", "audio", "blob"];
 const previousLink = ref<string>("");
 const nextLink = ref<string>("");
 const listing = ref<ResourceItem[] | null>(null);
+let listingFolder = "";
+let listingController: AbortController | null = null;
+let previewUpdate = 0;
+let disposed = false;
 const name = ref<string>("");
 const fullSize = ref<boolean>(false);
 const showNav = ref<boolean>(true);
@@ -331,17 +346,42 @@ const videoOptions = computed(() => {
 
 watch(route, () => {
   updatePreview();
-  toggleNavigation();
 });
+
+// Resource metadata arrives after the route changes. Use its actual media type
+// so image tap controls and video auto-hide never inherit each other's timers.
+watch(
+  () => fileStore.req?.type,
+  (type, previous) => {
+    if (type === "image") {
+      clearNavigationTimer();
+      hoverNav.value = false;
+      if (previous !== "image") showNav.value = true;
+    } else toggleNavigation();
+  }
+);
 
 // Specify hooks
 onMounted(async () => {
   window.addEventListener("keydown", key);
-  listing.value = fileStore.oldReq?.items ?? null;
+  listingFolder = url.removeLastDir(route.path);
+  const previousFolder = fileStore.oldReq;
+  listing.value =
+    previousFolder?.isDir &&
+    previousFolder.url.replace(/\/+$/, "") === listingFolder
+      ? previousFolder.items
+      : null;
   updatePreview();
 });
 
-onBeforeUnmount(() => window.removeEventListener("keydown", key));
+onBeforeUnmount(() => {
+  disposed = true;
+  previewUpdate++;
+  listingController?.abort();
+  window.removeEventListener("keydown", key);
+  if (navTimeout.value !== null) clearTimeout(navTimeout.value);
+  toggleNavigation.cancel();
+});
 
 // Specify methods
 const deleteFile = () => {
@@ -369,15 +409,23 @@ const deleteFile = () => {
   });
 };
 
-const prev = () => {
+let navigationPending = false;
+const navigateTo = async (path: string) => {
+  if (!path || layoutStore.loading || navigationPending) return;
+  navigationPending = true;
   hoverNav.value = false;
-  router.replace({ path: previousLink.value });
+  try {
+    await router.replace({ path });
+  } catch (error) {
+    $showError(error instanceof Error ? error : String(error));
+  } finally {
+    navigationPending = false;
+  }
 };
 
-const next = () => {
-  hoverNav.value = false;
-  router.replace({ path: nextLink.value });
-};
+const prev = () => navigateTo(previousLink.value);
+
+const next = () => navigateTo(nextLink.value);
 
 const key = (event: KeyboardEvent) => {
   if (layoutStore.currentPrompt !== null) {
@@ -403,11 +451,25 @@ const key = (event: KeyboardEvent) => {
   }
 };
 const updatePreview = async () => {
+  if (disposed) return;
+  const update = ++previewUpdate;
+  const currentPath = route.path;
+  const parent = url.removeLastDir(currentPath);
+  listingController?.abort();
+  listingController = null;
+  if (listingFolder !== parent) {
+    listingFolder = parent;
+    listing.value = null;
+  }
+  previousLink.value = "";
+  nextLink.value = "";
+  previousRaw.value = "";
+  nextRaw.value = "";
   if (player.value && player.value.paused && !player.value.ended) {
     autoPlay.value = false;
   }
 
-  const dirs = route.fullPath.split("/");
+  const dirs = currentPath.split("/");
   name.value = decodeURIComponent(dirs[dirs.length - 1]);
 
   // Load CSV content if it's a CSV file
@@ -427,17 +489,23 @@ const updatePreview = async () => {
   }
 
   if (!listing.value) {
+    const controller = new AbortController();
+    listingController = controller;
     try {
-      const path = url.removeLastDir(route.path);
-      const res = await api.fetch(path);
+      const res = await api.fetch(parent, controller.signal);
+      if (disposed || update !== previewUpdate || currentPath !== route.path)
+        return;
       listing.value = res.items;
-    } catch (e: any) {
-      $showError(e);
+    } catch (error) {
+      if (!disposed && update === previewUpdate && !controller.signal.aborted) {
+        $showError(error instanceof Error ? error : String(error));
+      }
+      return;
+    } finally {
+      if (listingController === controller) listingController = null;
     }
   }
 
-  previousLink.value = "";
-  nextLink.value = "";
   if (listing.value) {
     for (let i = 0; i < listing.value.length; i++) {
       if (listing.value[i].name !== name.value) {
@@ -488,6 +556,23 @@ const toggleNavigation = throttle(function () {
     navTimeout.value = null;
   }, 1500);
 }, 500);
+
+// Image gestures decide whether a completed action was a tap. Revealing the
+// toolbar on touchstart/mousemove would undo a tap-to-hide or interrupt a pinch.
+const clearNavigationTimer = () => {
+  toggleNavigation.cancel();
+  if (navTimeout.value !== null) clearTimeout(navTimeout.value);
+  navTimeout.value = null;
+};
+const revealNavigation = () => {
+  if (fileStore.req?.type !== "image") toggleNavigation();
+};
+const toggleGalleryNavigation = () => {
+  if (fileStore.req?.type !== "image") return;
+  clearNavigationTimer();
+  hoverNav.value = false;
+  showNav.value = !showNav.value;
+};
 
 const close = () => {
   const uri = url.removeLastDir(route.path) + "/";

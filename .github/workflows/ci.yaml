@@ -76,7 +76,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version: "1.26"
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: "frontend/package.json"
@@ -91,7 +91,7 @@ jobs:
 
   release:
     name: Release
-    needs: ["lint-frontend", "lint-backend", "test", "build"]
+    needs: ["lint-frontend", "test-frontend", "lint-backend", "test", "build"]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
@@ -102,7 +102,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version: "1.26"
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: "frontend/package.json"
@@ -125,6 +125,3 @@ jobs:
           args: release --clean --skip=docker
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
-

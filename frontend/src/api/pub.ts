@@ -2,6 +2,7 @@ import { fetchURL, removePrefix, createURL } from "./utils";
 import { baseURL } from "@/utils/constants";
 import * as tus from "tus-js-client";
 import { origin, tusSettings } from "@/utils/constants";
+import { encodePath } from "@/utils/url";
 import {
   publicUploadConflictError,
   publicUploadConflictHeader,
@@ -38,13 +39,19 @@ function isMissingPublicUpload(error: Error | tus.DetailedError) {
   );
 }
 
-export async function fetch(url: string, password: string = "") {
+export async function fetch(
+  url: string,
+  password: string = "",
+  signal?: AbortSignal,
+  token = ""
+) {
   url = removePrefix(url);
 
   const res = await fetchURL(
-    `/api/public/share${url}`,
+    `/api/public/share${url}${token ? `?${new URLSearchParams({ token })}` : ""}`,
     {
       headers: { "X-SHARE-PASSWORD": encodeURIComponent(password) },
+      signal,
     },
     false
   );
@@ -123,6 +130,37 @@ export function getThumbnailURL(
     v: modified,
     ...(token && { token }),
   });
+}
+
+export function getImagePreviewURL(file: Resource) {
+  const path = file.path.startsWith("/") ? file.path : `/${file.path}`;
+  return createURL(`api/public/preview/${file.hash}${path}`, {
+    v: file.modified,
+    ...(file.token && { token: file.token }),
+  });
+}
+
+// Legacy password shares may have no query token. Fetch image bytes with the
+// password header in that case; never put the password into an image URL.
+export async function fetchImage(
+  file: Resource,
+  original: boolean,
+  password: string,
+  signal: AbortSignal
+) {
+  const path = file.path.startsWith("/") ? file.path : `/${file.path}`;
+  const endpoint = `api/public/${original ? "dl" : "preview"}/${file.hash}${path}`;
+  const query = new URLSearchParams({ inline: "true" });
+  if (file.token) query.set("token", file.token);
+  const response = await fetchURL(
+    `/${encodePath(endpoint)}?${query}`,
+    {
+      signal,
+      headers: { "X-SHARE-PASSWORD": encodeURIComponent(password) },
+    },
+    false
+  );
+  return response.blob();
 }
 
 // This endpoint is separate from authenticated /api/tus. Passwords are sent
