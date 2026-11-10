@@ -17,6 +17,7 @@ const harness = vi.hoisted(() => ({
 }));
 vi.mock("vue", async (original) => ({
   ...(await original<typeof import("vue")>()),
+  useSSRContext: () => ({ modules: new Set<string>() }),
   inject: () => harness.error,
   onMounted: (callback: () => void) => harness.mounted.push(callback),
   onBeforeUnmount: (callback: () => void) => harness.unmounted.push(callback),
