@@ -49,9 +49,6 @@
           <template v-else>{{ t("prompts.calculateFolderDetails") }}</template>
         </button>
       </div>
-      <p v-else-if="counting" class="download-hint" role="status">
-        {{ t("prompts.shareDownloadPreparingTotals") }}
-      </p>
       <p
         v-if="fileCount !== undefined || selectedSize"
         class="download-total"
@@ -79,11 +76,7 @@
         type="button"
         class="button button--block download-option"
         :disabled="
-          busy !== null ||
-          includesFolders ||
-          counting ||
-          needsCount ||
-          fileCount === 0
+          busy !== null || includesFolders || counting || fileCount === 0
         "
         :aria-busy="busy === 'all'"
         @click="start('all')"
@@ -96,9 +89,9 @@
         :id="includesFolders ? 'focus-prompt' : undefined"
         :href="archiveURL"
         class="button button--block button--flat download-option zip-option"
-        :aria-disabled="busy !== null || counting || needsCount"
+        :aria-disabled="busy !== null || counting"
         :aria-busy="busy === 'zip'"
-        :tabindex="busy === null && !counting && !needsCount ? undefined : -1"
+        :tabindex="busy === null && !counting ? undefined : -1"
         referrerpolicy="no-referrer"
         @click.prevent="start('zip')"
       >
@@ -107,14 +100,6 @@
         {{ t("prompts.shareDownloadZip") }}
       </a>
       <p v-if="error" class="download-error" role="alert">{{ error }}</p>
-      <button
-        v-if="needsCount && !counting"
-        type="button"
-        class="button button--flat"
-        @click="loadCount"
-      >
-        {{ t("prompts.shareDownloadRetryTotals") }}
-      </button>
     </div>
 
     <div class="card-action">
@@ -145,24 +130,16 @@ const includesFolders = computed(
 const archiveURL = computed<string | undefined>(
   () => layoutStore.currentPrompt?.props?.archiveURL
 );
-const prepare = computed<
-  ((signal: AbortSignal) => Promise<number>) | undefined
->(() => layoutStore.currentPrompt?.props?.prepare);
 const calculateTotals = computed<
   | ((signal: AbortSignal) => Promise<{ fileCount: number; size: number }>)
   | undefined
 >(() => layoutStore.currentPrompt?.props?.calculateTotals);
 const calculatedTotals = ref<{ fileCount: number; size: number }>();
-const recursiveCount = ref<number>();
 const counting = ref(false);
-const needsCount = computed(
-  () => !!prepare.value && recursiveCount.value === undefined
-);
-const fileCount = computed<number | undefined>(() =>
-  prepare.value
-    ? recursiveCount.value
-    : (calculatedTotals.value?.fileCount ??
-      layoutStore.currentPrompt?.props?.fileCount)
+const fileCount = computed<number | undefined>(
+  () =>
+    calculatedTotals.value?.fileCount ??
+    layoutStore.currentPrompt?.props?.fileCount
 );
 const selectedSize = computed(() => {
   const bytes =
@@ -177,21 +154,15 @@ const error = ref("");
 let active: AbortController | null = null;
 
 async function loadCount() {
-  const prepareCount = prepare.value;
   const calculate = calculateTotals.value;
-  if ((!prepareCount && !calculate) || active) return;
+  if (!calculate || active) return;
   const controller = new AbortController();
   active = controller;
   counting.value = true;
   error.value = "";
   try {
-    if (calculate) {
-      const totals = await calculate(controller.signal);
-      if (active === controller) calculatedTotals.value = totals;
-    } else if (prepareCount) {
-      const count = await prepareCount(controller.signal);
-      if (active === controller) recursiveCount.value = count;
-    }
+    const totals = await calculate(controller.signal);
+    if (active === controller) calculatedTotals.value = totals;
   } catch {
     if (active === controller) error.value = t("prompts.shareDownloadError");
   } finally {
@@ -207,7 +178,6 @@ function cancel() {
   active = null;
   busy.value = null;
   counting.value = false;
-  recursiveCount.value = undefined;
   calculatedTotals.value = undefined;
   error.value = "";
 }
@@ -218,7 +188,6 @@ async function start(mode: "all" | "zip") {
     !prompt?.confirm ||
     busy.value ||
     counting.value ||
-    needsCount.value ||
     (mode === "all" && (includesFolders.value || fileCount.value === 0))
   )
     return;
@@ -228,9 +197,13 @@ async function start(mode: "all" | "zip") {
   busy.value = mode;
   error.value = "";
   try {
-    await prompt.confirm(mode, controller.signal);
+    const started = await prompt.confirm(mode, controller.signal);
     if (!controller.signal.aborted && layoutStore.currentPrompt === prompt) {
-      layoutStore.closeHovers();
+      if (started === false) {
+        error.value = t("prompts.shareDownloadEmptyFolder");
+      } else {
+        layoutStore.closeHovers();
+      }
     }
   } catch (failure) {
     if (!controller.signal.aborted) {
@@ -253,14 +226,7 @@ async function start(mode: "all" | "zip") {
   }
 }
 
-watch(
-  [prepare, calculateTotals],
-  () => {
-    cancel();
-    if (prepare.value) void loadCount();
-  },
-  { immediate: true }
-);
+watch(() => layoutStore.currentPrompt, cancel);
 onBeforeUnmount(cancel);
 onDeactivated(cancel);
 </script>

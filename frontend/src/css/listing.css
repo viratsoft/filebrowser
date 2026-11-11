@@ -310,10 +310,18 @@ html[dir="rtl"] #listing {
   .listing-details
   > .size {
   display: block;
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  margin-block-start: 0.0625rem;
 }
 
 #listing.responsive-listing.mosaic.gallery .item .listing-details {
-  padding: 0.375rem 0.5rem;
+  padding: 0.1875rem 0.375rem;
+}
+
+#listing.responsive-listing.mosaic.gallery .item .listing-details > .name {
+  font-size: 0.8125rem;
+  line-height: 1.2;
 }
 
 #listing.responsive-listing.mosaic.gallery

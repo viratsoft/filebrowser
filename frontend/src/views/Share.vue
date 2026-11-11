@@ -571,7 +571,7 @@ const download = () => {
   const archiveURL = api.getZipDownloadURL(hash.value, token.value, paths);
   openShareDownload({
     archiveURL,
-    zipChecks: urls,
+    zipChecks: [...urls, archiveURL],
     individualURLs: async () => urls,
     includesFolders,
     fileCount: includesFolders ? undefined : files.length,
@@ -586,35 +586,31 @@ const downloadFolder = () => {
   const share = req.value;
   if (!share?.isDir || share.uploadOnly || layoutStore.loading) return;
   const sharePassword = password.value;
-  let paths: string[] = [];
   openShareDownload({
     archiveURL: api.getFolderArchiveURL(share),
-    prepare: async (signal) => {
+    zipChecks: [api.getDownloadURL(share)],
+    individualURLs: async (signal) => {
       const plan = await api.prepareFolderDownload(
         share,
         sharePassword,
         signal
       );
-      paths = plan.paths;
-      return paths.length;
+      return plan.paths.map((path) => api.getDownloadURL({ ...share, path }));
     },
-    individualURLs: async () =>
-      paths.map((path) => api.getDownloadURL({ ...share, path })),
   });
 };
 
 function openShareDownload({
   archiveURL,
-  zipChecks = [],
+  zipChecks,
   individualURLs,
   includesFolders = false,
   fileCount,
   calculateTotals,
   selectedBytes,
-  prepare,
 }: {
   archiveURL: string;
-  zipChecks?: string[];
+  zipChecks: string[];
   individualURLs: (signal: AbortSignal) => Promise<string[]>;
   includesFolders?: boolean;
   fileCount?: number;
@@ -622,7 +618,6 @@ function openShareDownload({
     signal: AbortSignal
   ) => Promise<{ fileCount: number; size: number }>;
   selectedBytes?: number;
-  prepare?: (signal: AbortSignal) => Promise<number>;
 }) {
   const openedOn = route.fullPath;
   layoutStore.showHover({
@@ -633,21 +628,14 @@ function openShareDownload({
       fileCount,
       calculateTotals,
       selectedBytes,
-      prepare,
     },
     confirm: async (mode: "all" | "zip", signal: AbortSignal) => {
       if (mode === "all" && includesFolders) return;
       const downloads =
         mode === "zip" ? [archiveURL] : await individualURLs(signal);
       if (signal.aborted || route.fullPath !== openedOn) return;
-      await api.checkDownloads(
-        mode === "zip"
-          ? prepare
-            ? zipChecks
-            : [...zipChecks, archiveURL]
-          : downloads,
-        signal
-      );
+      if (downloads.length === 0) return false;
+      await api.checkDownloads(mode === "zip" ? zipChecks : downloads, signal);
       if (signal.aborted || route.fullPath !== openedOn) return;
       for (const url of downloads) api.startDownload(url);
     },
