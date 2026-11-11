@@ -1,6 +1,7 @@
 <template>
   <div
     class="item"
+    :class="{ 'shared-listing-item': readOnly }"
     role="button"
     tabindex="0"
     :draggable="isDraggable"
@@ -8,6 +9,7 @@
     @dragover="dragOver"
     @drop="drop"
     @click="itemClick"
+    @keydown="handleItemKeydown"
     @mousedown="handleMouseDown"
     @mouseup="handleMouseUp"
     @mouseleave="handleMouseLeave"
@@ -31,6 +33,7 @@
         loading="lazy"
         decoding="async"
         referrerpolicy="no-referrer"
+        :draggable="readOnly ? false : undefined"
         @error="thumbnailFailed = true"
       />
       <i v-else class="material-icons"></i>
@@ -59,7 +62,7 @@ import { filesize } from "@/utils";
 import dayjs from "dayjs";
 import { files as api } from "@/api";
 import * as upload from "@/utils/upload";
-import { computed, inject, ref, watch } from "vue";
+import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 const touches = ref<number>(0);
@@ -248,7 +251,7 @@ const drop = async (event: Event) => {
   action(false, false);
 };
 
-const itemClick = (event: Event | KeyboardEvent) => {
+const itemClick = (event: MouseEvent | KeyboardEvent) => {
   // If long press was triggered, prevent normal click behavior
   if (longPressTriggered.value) {
     longPressTriggered.value = false;
@@ -256,18 +259,27 @@ const itemClick = (event: Event | KeyboardEvent) => {
   }
 
   if (
-    singleClick.value &&
-    !(event as KeyboardEvent).ctrlKey &&
-    !(event as KeyboardEvent).metaKey &&
-    !(event as KeyboardEvent).shiftKey &&
+    (props.readOnly || singleClick.value) &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
     !fileStore.multiple
   )
     open();
   else click(event);
 };
 
+const handleItemKeydown = (event: KeyboardEvent) => {
+  if (!props.readOnly || (event.key !== "Enter" && event.key !== " ")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (!event.repeat) itemClick(event);
+};
+
 const contextMenu = (event: MouseEvent) => {
   event.preventDefault();
+  if (props.readOnly && (longPressTriggered.value || startPosition.value))
+    return;
   if (
     fileStore.selected.length === 0 ||
     event.ctrlKey ||
@@ -281,13 +293,13 @@ const click = (event: Event | KeyboardEvent) => {
   if (!singleClick.value && fileStore.selectedCount !== 0)
     event.preventDefault();
 
-  setTimeout(() => {
-    touches.value = 0;
-  }, 300);
+  if (!props.readOnly) {
+    setTimeout(() => {
+      touches.value = 0;
+    }, 300);
 
-  touches.value++;
-  if (touches.value > 1) {
-    open();
+    touches.value++;
+    if (touches.value > 1) open();
   }
 
   if (fileStore.selected.indexOf(props.index) !== -1) {
@@ -348,6 +360,8 @@ const getExtension = (fileName: string): string => {
 
 // Long-press helper functions
 const startLongPress = (clientX: number, clientY: number) => {
+  cancelLongPress();
+  if (props.readOnly) longPressTriggered.value = false;
   startPosition.value = { x: clientX, y: clientY };
   longPressTimer.value = window.setTimeout(() => {
     handleLongPress();
@@ -363,7 +377,11 @@ const cancelLongPress = () => {
 };
 
 const handleLongPress = () => {
-  if (singleClick.value) {
+  if (props.readOnly) {
+    longPressTriggered.value = true;
+    fileStore.multiple = true;
+    if (!isSelected.value) fileStore.selected.push(props.index);
+  } else if (singleClick.value) {
     longPressTriggered.value = true;
     click(new Event("longpress"));
   }
@@ -398,10 +416,16 @@ const handleTouchStart = (event: TouchEvent) => {
   if (event.touches.length === 1) {
     const touch = event.touches[0];
     startLongPress(touch.clientX, touch.clientY);
+  } else if (props.readOnly) {
+    cancelLongPress();
   }
 };
 
-const handleTouchEnd = () => {
+const handleTouchEnd = (event: TouchEvent) => {
+  if (props.readOnly && longPressTriggered.value && event.cancelable) {
+    // Consume the release so the browser does not generate a second click.
+    event.preventDefault();
+  }
   cancelLongPress();
 };
 
@@ -417,4 +441,12 @@ const handleTouchMove = (event: TouchEvent) => {
     }
   }
 };
+
+onBeforeUnmount(cancelLongPress);
 </script>
+
+<style scoped>
+.shared-listing-item {
+  -webkit-touch-callout: none;
+}
+</style>

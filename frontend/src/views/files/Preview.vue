@@ -14,6 +14,7 @@
         :filename="name"
         :position="galleryPosition"
         :total="galleryItems.length"
+        :bytes="layoutStore.loading ? undefined : fileStore.req?.size"
       />
       <title v-else>{{ name }}</title>
       <GalleryQualityButton

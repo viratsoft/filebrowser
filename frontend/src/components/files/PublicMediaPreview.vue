@@ -16,6 +16,7 @@
         :filename="file.name"
         :position="singleFileShare ? 1 : currentIndex + 1"
         :total="singleFileShare ? 1 : siblings.length"
+        :bytes="file.size"
       />
       <gallery-quality-button
         v-if="file.type === 'image' && file.allowImagePreview"

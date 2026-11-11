@@ -360,7 +360,9 @@
             >
               <p>{{ t("files.multipleSelectionEnabled") }}</p>
               <div
-                @click="() => (fileStore.multiple = false)"
+                @click="clearShareSelection"
+                @keydown.enter.prevent="clearShareSelection"
+                @keydown.space.prevent="clearShareSelection"
                 tabindex="0"
                 role="button"
                 :data-title="t('buttons.clear')"
@@ -618,19 +620,19 @@ function closeGallery() {
   }
 }
 
+const clearShareSelection = () => {
+  fileStore.selected = [];
+  fileStore.multiple = false;
+};
+
 const keyEvent = (event: KeyboardEvent) => {
-  if (event.key === "Escape") {
-    // If we're on a listing, unselect all
-    // files and folders.
-    if (fileStore.selectedCount > 0) {
-      fileStore.selected = [];
-    }
-  }
+  if (event.key === "Escape") clearShareSelection();
 };
 
 const toggleMultipleSelection = () => {
   layoutStore.closeHovers();
-  fileStore.toggleMultiple();
+  if (fileStore.multiple) clearShareSelection();
+  else fileStore.toggleMultiple();
 };
 
 const openUpload = () => uploadInput.value?.click();
