@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/share"
@@ -170,6 +171,8 @@ func ifPathWithName(r *http.Request) (id, filePath string) {
 }
 
 var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	// Public metadata can contain a bearer token and the names of shared files.
+	w.Header().Set("Cache-Control", "private, no-store")
 	file := d.raw.(*files.FileInfo)
 
 	if file.IsDir {
@@ -178,7 +181,6 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 		if d.rawShare.UploadOnly {
 			// The response is visitor-session-specific. Never allow a browser or
 			// intermediary cache to replay one visitor's listing to another.
-			w.Header().Set("Cache-Control", "private, no-store")
 			w.Header().Set("Vary", "Cookie")
 			session, err := publicUploadSessions.session(w, r, d.rawShare.Hash, d.settings.Key, d.rawShare.SessionUploadFolder)
 			if err != nil {
@@ -337,12 +339,13 @@ func createVisitorSessionFolder(afs afero.Fs, folder string, mode os.FileMode) (
 }
 
 var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	file := d.raw.(*files.FileInfo)
 	if d.rawShare.UploadOnly {
 		return http.StatusForbidden, nil
 	}
 	if !file.IsDir {
-		return rawFileHandler(w, r, file)
+		return serveRawFile(w, r, file, "private, no-store", time.Time{})
 	}
 
 	return rawDirHandler(w, r, d, file)

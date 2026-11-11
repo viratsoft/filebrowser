@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as shares from "../share";
 import * as publicApi from "../pub";
+import { imagePreviewURL } from "../image-preview-url";
 import { createURL, fetchJSON, fetchURL } from "../utils";
 
 vi.mock("../utils", () => ({
@@ -17,6 +18,16 @@ vi.mock("@/utils/constants", () => ({
 vi.mock("tus-js-client", () => ({}));
 
 describe("share thumbnail preferences and URLs", () => {
+  it("refreshes login thumbnails once so the shared server cache gets populated", () => {
+    const modified = "2026-11-11T00:00:00Z";
+    imagePreviewURL("/photo.png", modified, "thumb");
+    expect(createURL).toHaveBeenCalledWith("api/preview/thumb/photo.png", {
+      inline: "true",
+      key: Date.parse(modified),
+      thumbnailVersion: "2",
+    });
+  });
+
   it("uses a distinct public viewer preview URL with only the share token", () => {
     publicApi.getImagePreviewURL({
       hash: "hash",

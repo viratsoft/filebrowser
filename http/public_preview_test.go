@@ -44,7 +44,7 @@ func TestPublicViewerPreviewAndOriginalRespectSharePolicy(t *testing.T) {
 	server := &settings.Server{EnableThumbnails: true, ResizePreview: true}
 	cache := &publicThumbnailTestCache{data: map[string][]byte{}}
 	preview := handle(publicPreviewHandler(img.New(1), cache), "/api/public/preview/", st, server)
-	thumb := handle(publicThumbnailHandler(img.New(1), cache), "/api/public/thumb/", st, server)
+	thumb := handle(testPublicThumbnailHandler(cache), "/api/public/thumb/", st, server)
 	raw := handle(publicDlHandler, "/api/public/dl/", st, server)
 	request := func(handler http.Handler, endpoint, token string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/api/public/"+endpoint+"/viewer/photo.JPG?inline=true&token="+token, nil)
@@ -79,8 +79,12 @@ func TestPublicViewerPreviewAndOriginalRespectSharePolicy(t *testing.T) {
 	if rec := request(preview, "preview", link.Token); rec.Code != http.StatusOK {
 		t.Fatalf("appearance preference incorrectly removed existing image read access: %d", rec.Code)
 	}
-	if rec := request(raw, "dl", link.Token); rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), original.Bytes()) {
-		t.Fatalf("original changed or unreadable: %d", rec.Code)
+	originalResponse := request(raw, "dl", link.Token)
+	if originalResponse.Code != http.StatusOK || !bytes.Equal(originalResponse.Body.Bytes(), original.Bytes()) {
+		t.Fatalf("original changed or unreadable: %d", originalResponse.Code)
+	}
+	if originalResponse.Header().Get("Cache-Control") != "private, no-store" || originalResponse.Header().Get("Last-Modified") != "" {
+		t.Fatalf("public original has unsafe cache headers: %v", originalResponse.Header())
 	}
 	server.ResizePreview = false
 	if rec := request(preview, "preview", link.Token); rec.Code != http.StatusForbidden {

@@ -54,12 +54,13 @@
         @action="openUpload"
       />
       <select-all-button v-if="canSwitchView" public-share />
+      <action
+        v-if="canSwitchView"
+        :icon="listingViewModes[viewMode].icon"
+        :label="t('buttons.switchView')"
+        @action="switchView"
+      />
       <template v-if="canSwitchView" #actions>
-        <action
-          :icon="listingViewModes[viewMode].icon"
-          :label="t('buttons.switchView')"
-          @action="switchView"
-        />
         <action
           icon="check_circle"
           :label="t('buttons.selectMultiple')"

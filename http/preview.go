@@ -34,7 +34,7 @@ type FileCache interface {
 	Delete(ctx context.Context, key string) error
 }
 
-func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, resizePreview bool) handleFunc {
+func previewHandler(imgSvc ImgService, fileCache FileCache, renderThumbnail thumbnailRenderer, enableThumbnails, resizePreview bool) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		if !d.user.Perm.Download {
 			return http.StatusAccepted, nil
@@ -64,7 +64,7 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 
 		switch file.Type {
 		case "image":
-			return handleImagePreview(w, r, imgSvc, fileCache, file, previewSize, enableThumbnails, resizePreview)
+			return handleImagePreview(w, r, imgSvc, fileCache, renderThumbnail, file, previewSize, enableThumbnails, resizePreview)
 		default:
 			return http.StatusNotImplemented, fmt.Errorf("can't create preview for %s type", file.Type)
 		}
@@ -76,6 +76,7 @@ func handleImagePreview(
 	r *http.Request,
 	imgSvc ImgService,
 	fileCache FileCache,
+	renderThumbnail thumbnailRenderer,
 	file *files.FileInfo,
 	previewSize PreviewSize,
 	enableThumbnails, resizePreview bool,
@@ -100,12 +101,27 @@ func handleImagePreview(
 		return errToStatus(err), err
 	}
 	if !ok {
-		resizedImage, err = createPreview(imgSvc, fileCache, file, previewSize)
-		if err != nil {
-			return errToStatus(err), err
+		if previewSize == PreviewSizeThumb && file.Mode.IsRegular() {
+			resizedImage, err = renderThumbnail(r.Context(), file)
+			if err == nil {
+				_ = fileCache.Store(r.Context(), cacheKey, resizedImage)
+			}
+		}
+		if len(resizedImage) == 0 {
+			if r.Context().Err() != nil {
+				return errToStatus(r.Context().Err()), r.Context().Err()
+			}
+			// Keep the authenticated preview fallback for files outside public limits.
+			resizedImage, err = createPreview(imgSvc, fileCache, file, previewSize)
+			if err != nil {
+				return errToStatus(err), err
+			}
 		}
 	}
 
+	if previewSize == PreviewSizeThumb {
+		w.Header().Set("Content-Type", "image/jpeg")
+	}
 	w.Header().Set("Cache-Control", "private")
 	http.ServeContent(w, r, file.Name, file.ModTime, bytes.NewReader(resizedImage))
 
@@ -152,5 +168,8 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 }
 
 func previewCacheKey(f *files.FileInfo, previewSize PreviewSize) string {
+	if previewSize == PreviewSizeThumb {
+		return fmt.Sprintf("thumb-v2-%x-%d", f.RealPath(), f.ModTime.UnixNano())
+	}
 	return fmt.Sprintf("%x%x%x", f.RealPath(), f.ModTime.Unix(), previewSize)
 }

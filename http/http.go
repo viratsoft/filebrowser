@@ -86,15 +86,16 @@ func NewHandler(
 	api.Handle("/settings", monkey(settingsPutHandler, "")).Methods("PUT")
 
 	api.PathPrefix("/raw").Handler(monkey(rawHandler, "/api/raw")).Methods("GET")
+	renderThumbnail := newImageRenderer(imgSvc, fileCache, PreviewSizeThumb)
 	api.PathPrefix("/preview/{size}/{path:.*}").
-		Handler(monkey(previewHandler(imgSvc, fileCache, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
+		Handler(monkey(previewHandler(imgSvc, fileCache, renderThumbnail, server.EnableThumbnails, server.ResizePreview), "/api/preview")).Methods("GET")
 	api.PathPrefix("/command").Handler(monkey(commandsHandler, "/api/command")).Methods("GET")
 	api.PathPrefix("/search").Handler(monkey(searchHandler, "/api/search")).Methods("GET")
 	api.PathPrefix("/subtitle").Handler(monkey(subtitleHandler, "/api/subtitle")).Methods("GET")
 
 	public := api.PathPrefix("/public").Subrouter()
 	public.PathPrefix("/preview/").Handler(monkey(publicPreviewHandler(imgSvc, fileCache), "/api/public/preview/")).Methods("GET")
-	public.PathPrefix("/thumb/").Handler(monkey(publicThumbnailHandler(imgSvc, fileCache), "/api/public/thumb/")).Methods("GET")
+	public.PathPrefix("/thumb/").Handler(monkey(publicThumbnailHandler(imgSvc, renderThumbnail), "/api/public/thumb/")).Methods("GET")
 	public.PathPrefix("/dl").Handler(monkey(publicDlHandler, "/api/public/dl/")).Methods("GET")
 	public.PathPrefix("/tus").Handler(monkey(publicTusPostHandler(uploadCache), "/api/public/tus/")).Methods("POST")
 	public.PathPrefix("/tus").Handler(monkey(publicTusHeadHandler(uploadCache), "/api/public/tus/")).Methods("HEAD", "GET")

@@ -10,6 +10,7 @@ import (
 	gopath "path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/fileutils"
@@ -217,6 +218,10 @@ func rawDirHandler(w http.ResponseWriter, r *http.Request, d *data, file *files.
 }
 
 func rawFileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo) (int, error) {
+	return serveRawFile(w, r, file, "private", file.ModTime)
+}
+
+func serveRawFile(w http.ResponseWriter, r *http.Request, file *files.FileInfo, cacheControl string, modified time.Time) (int, error) {
 	fd, err := file.Fs.Open(file.Path)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -226,7 +231,7 @@ func rawFileHandler(w http.ResponseWriter, r *http.Request, file *files.FileInfo
 	setContentDisposition(w, r, file)
 	w.Header().Add("Content-Security-Policy", `script-src 'none';`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private")
-	http.ServeContent(w, r, file.Name, file.ModTime, fd)
+	w.Header().Set("Cache-Control", cacheControl)
+	http.ServeContent(w, r, file.Name, modified, fd)
 	return 0, nil
 }

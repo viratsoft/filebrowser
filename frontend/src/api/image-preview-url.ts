@@ -18,5 +18,7 @@ export function imagePreviewURL(
   return createURL(`api/preview/${size}${relativePath}`, {
     inline: "true",
     key: Date.parse(modified),
+    // Refresh thumbnails once after switching to the shared server renderer.
+    ...(size === "thumb" && { thumbnailVersion: "2" }),
   });
 }
