@@ -1,21 +1,14 @@
 <template>
   <div class="share-folder-size" :aria-busy="loading">
     <div class="size-controls">
-      <span v-if="details" aria-live="polite">
-        <strong
-          >{{
-            t(details.incomplete ? "prompts.partialSize" : "prompts.size")
-          }}:</strong
-        >
-        {{ filesize(details.size) }}
-      </span>
+      <strong>{{ t("prompts.folderDetails") }}:</strong>
       <button
         v-if="!details && !loading"
         type="button"
         class="button button--flat calculate-size"
         @click="calculate"
       >
-        {{ t("prompts.calculateShareSize") }}
+        {{ t("prompts.calculateFolderDetails") }}
       </button>
       <button
         v-else
@@ -38,6 +31,37 @@
         <i v-else class="material-icons" aria-hidden="true">refresh</i>
       </button>
     </div>
+    <div aria-live="polite">
+      <div v-if="details" class="folder-totals">
+        <span>
+          <strong
+            >{{
+              t(
+                details.incomplete
+                  ? "prompts.partialFiles"
+                  : "prompts.totalFiles"
+              )
+            }}:</strong
+          >
+          {{ n(details.numFiles) }}
+        </span>
+        <span>
+          <strong
+            >{{
+              t(
+                details.incomplete
+                  ? "prompts.partialSize"
+                  : "prompts.shareDownloadTotalSize"
+              )
+            }}:</strong
+          >
+          {{ filesize(details.size, { base: 10, symbols: { kB: "KB" } }) }}
+        </span>
+      </div>
+      <p v-if="details" class="size-note">
+        {{ t("prompts.folderDetailsIncludesSubfolders") }}
+      </p>
+    </div>
     <p v-if="error" class="size-note" role="alert">{{ error }}</p>
     <p v-else-if="details?.incomplete" class="size-note" role="status">
       {{ t("prompts.folderDetailsIncomplete") }}
@@ -48,14 +72,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { filesize } from "filesize";
 import { pub as api } from "@/api";
 import { StatusError } from "@/api/utils";
-import { filesize } from "@/utils";
 import GallerySpinner from "./GallerySpinner.vue";
 
 const props = defineProps<{ url: string; password: string; token: string }>();
-const { t } = useI18n();
-const details = ref<{ size: number; incomplete?: boolean } | null>(null);
+const { t, n } = useI18n();
+const details = ref<Awaited<ReturnType<typeof api.folderSize>> | null>(null);
 const loading = ref(false);
 const error = ref("");
 let active: AbortController | null = null;
@@ -105,19 +129,19 @@ onBeforeUnmount(reset);
 </script>
 
 <style scoped>
-.share-folder-size {
-  min-width: 0;
-  margin-inline-start: auto;
-  text-align: end;
-}
-
 .size-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: 0.25rem;
   min-height: 2.5rem;
-  white-space: nowrap;
+}
+
+.folder-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-block: 0.25rem;
 }
 
 .size-controls .button {

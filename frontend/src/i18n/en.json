@@ -163,6 +163,7 @@
     "folderDetails": "Folder Details",
     "partialSize": "Size (partial)",
     "partialFiles": "Files (partial)",
+    "folderDetailsIncludesSubfolders": "Includes subfolders",
     "folderDetailsIncomplete": "Some items could not be read. Totals are incomplete. Refresh to try again.",
     "calculateFolderDetails": "Calculate",
     "calculateShareSize": "Calculate size",

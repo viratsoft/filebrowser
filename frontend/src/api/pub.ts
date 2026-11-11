@@ -83,7 +83,7 @@ export async function folderSize(
   password: string,
   token: string,
   signal: AbortSignal
-): Promise<{ size: number; incomplete?: boolean }> {
+): Promise<{ size: number; numFiles: number; incomplete?: boolean }> {
   const query = token ? `?${new URLSearchParams({ token })}` : "";
   const response = await fetchURL(
     `/api/public/size${removePrefix(url)}${query}`,

@@ -165,7 +165,7 @@
         v-else
         id="listing"
         ref="listing"
-        class="file-icons"
+        class="file-icons responsive-listing"
         data-clear-on-click="true"
         :class="authStore.user?.viewMode ?? ''"
         @click="handleEmptyAreaClick"

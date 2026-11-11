@@ -56,23 +56,23 @@ func TestPublicFolderSizeOnlyCountsReadableShareFiles(t *testing.T) {
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/public/size/"+suffix, nil))
 		return rec
 	}
-	checkSize := func(suffix string, size int64) {
+	checkDetails := func(suffix string, size, numFiles int64) {
 		t.Helper()
 		rec := request(suffix)
 		if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "private, no-store" {
 			t.Fatalf("unexpected response: %d %s", rec.Code, rec.Body.String())
 		}
 		var result map[string]int64
-		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || len(result) != 1 || result["size"] != size {
-			t.Fatalf("expected only size=%d, got %s", size, rec.Body.String())
+		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || len(result) != 2 || result["size"] != size || result["numFiles"] != numFiles {
+			t.Fatalf("expected size=%d and numFiles=%d, got %s", size, numFiles, rec.Body.String())
 		}
 	}
-	checkSize("size/?token=token", 8)
-	checkSize("size/nested/?token=token", 5)
+	checkDetails("size/?token=token", 8, 2)
+	checkDetails("size/nested/?token=token", 5, 1)
 	if err := os.WriteFile(filepath.Join(root, "shared", "extra"), []byte("ok"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	checkSize("size/?token=token", 10)
+	checkDetails("size/?token=token", 10, 3)
 
 	for suffix, want := range map[string]int{
 		"size/":                            http.StatusUnauthorized,
@@ -96,5 +96,5 @@ func TestPublicFolderSizeOnlyCountsReadableShareFiles(t *testing.T) {
 			}
 		}
 	})
-	checkSize("size/?token=token", 10)
+	checkDetails("size/?token=token", 10, 3)
 }

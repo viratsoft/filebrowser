@@ -73,8 +73,5 @@ var publicFolderSizeHandler = withShareFile(func(w http.ResponseWriter, r *http.
 	case err != nil:
 		return errToStatus(err), err
 	}
-	return renderJSON(w, r, struct {
-		Size       int64 `json:"size"`
-		Incomplete bool  `json:"incomplete,omitempty"`
-	}{Size: details.Size, Incomplete: details.Incomplete})
+	return renderJSON(w, r, details)
 }, false, true)

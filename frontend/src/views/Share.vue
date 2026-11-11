@@ -149,9 +149,6 @@
             v-if="req.isDir"
             class="share__box__element share-folder-summary"
           >
-            <span
-              ><strong>{{ t("files.files") }}:</strong> {{ humanSize }}</span
-            >
             <share-folder-size
               :key="req.url"
               :url="req.url"
@@ -228,7 +225,7 @@
           <div
             v-if="!isUploadOnly"
             id="listing"
-            class="file-icons"
+            class="file-icons responsive-listing"
             :class="viewMode"
           >
             <div>
@@ -706,11 +703,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .share-folder-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.35rem 0.8rem;
   padding-block: 0.45rem;
   word-break: normal;
 }
@@ -794,64 +786,6 @@ onBeforeUnmount(() => {
 @media (max-width: 736px) {
   .share__box__element .share-download-cta {
     min-height: 2.75rem;
-  }
-
-  #listing.list :deep(.shared-listing-item .listing-details) {
-    display: grid;
-    grid-template-columns: fit-content(65%) minmax(0, 1fr);
-    column-gap: 0.35rem;
-    row-gap: 0.2rem;
-    min-width: 0;
-  }
-
-  #listing.list :deep(.shared-listing-item .listing-details > .name) {
-    grid-area: 1 / 1 / 2 / -1;
-    width: auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    word-break: normal;
-  }
-
-  #listing.list :deep(.shared-listing-item .listing-details > .modified),
-  #listing.list
-    :deep(.shared-listing-item[data-dir="false"] .listing-details > .size) {
-    display: block;
-    width: auto;
-    color: inherit;
-    font-size: 0.75rem;
-    line-height: 1.25;
-    white-space: nowrap;
-  }
-
-  #listing.list :deep(.shared-listing-item .listing-details > .modified) {
-    grid-area: 2 / 1;
-  }
-
-  #listing.list
-    :deep(.shared-listing-item[data-dir="true"] .listing-details > .modified) {
-    grid-column: 1 / -1;
-  }
-
-  #listing.list :deep(.shared-listing-item[data-dir="false"] .size) {
-    grid-area: 2 / 2;
-  }
-
-  #listing.list :deep(.shared-listing-item[data-dir="false"] .size::before) {
-    content: "·";
-    margin-inline-end: 0.35rem;
-  }
-}
-
-@media (max-width: 600px) {
-  #shareList #listing.mosaic :deep(.item) {
-    width: calc(50% - 1em);
-  }
-
-  #shareList #listing.mosaic.gallery :deep(.item > div:first-child) {
-    height: auto;
-    aspect-ratio: 1;
   }
 }
 
