@@ -614,7 +614,13 @@ function openShareDownload({
   const openedOn = route.fullPath;
   layoutStore.showHover({
     prompt: "share-download",
-    props: { includesFolders, fileCount, fileCountScope, selectedBytes },
+    props: {
+      archiveURL,
+      includesFolders,
+      fileCount,
+      fileCountScope,
+      selectedBytes,
+    },
     confirm: async (mode: "all" | "zip", signal: AbortSignal) => {
       if (mode === "all" && includesFolders) return;
       const downloads =
@@ -780,6 +786,11 @@ onBeforeUnmount(() => {
   #listing.list :deep(.shared-listing-item .listing-details > .name) {
     grid-area: 1 / 1 / 2 / -1;
     width: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
   }
 
   #listing.list :deep(.shared-listing-item .listing-details > .modified),
@@ -787,7 +798,7 @@ onBeforeUnmount(() => {
     :deep(.shared-listing-item[data-dir="false"] .listing-details > .size) {
     display: block;
     width: auto;
-    color: var(--textSecondary);
+    color: inherit;
     font-size: 0.75rem;
     line-height: 1.25;
     white-space: nowrap;
@@ -809,15 +820,6 @@ onBeforeUnmount(() => {
   #listing.list :deep(.shared-listing-item[data-dir="false"] .size::before) {
     content: "·";
     margin-inline-end: 0.35rem;
-  }
-
-  #listing.list
-    :deep(
-      .shared-listing-item[aria-selected="true"]
-        .listing-details
-        > :is(.size, .modified)
-    ) {
-    color: inherit;
   }
 }
 

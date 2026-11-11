@@ -47,18 +47,20 @@
         <i v-else class="material-icons" aria-hidden="true">file_download</i>
         {{ t("prompts.shareDownloadAll") }}
       </button>
-      <button
+      <a
         :id="includesFolders ? 'focus-prompt' : undefined"
-        type="button"
+        :href="archiveURL"
         class="button button--block button--flat download-option zip-option"
-        :disabled="busy !== null"
+        :aria-disabled="busy !== null"
         :aria-busy="busy === 'zip'"
-        @click="start('zip')"
+        :tabindex="busy === null ? undefined : -1"
+        referrerpolicy="no-referrer"
+        @click.prevent="start('zip')"
       >
         <gallery-spinner v-if="busy === 'zip'" :label="t('files.loading')" />
         <i v-else class="material-icons" aria-hidden="true">folder_zip</i>
         {{ t("prompts.shareDownloadZip") }}
-      </button>
+      </a>
       <p v-if="error" class="download-error" role="alert">{{ error }}</p>
     </div>
 
@@ -87,6 +89,9 @@ const { t, n } = useI18n();
 const layoutStore = useLayoutStore();
 const includesFolders = computed(
   () => !!layoutStore.currentPrompt?.props?.includesFolders
+);
+const archiveURL = computed<string | undefined>(
+  () => layoutStore.currentPrompt?.props?.archiveURL
 );
 const fileCount = computed<number | undefined>(
   () => layoutStore.currentPrompt?.props?.fileCount
@@ -193,6 +198,7 @@ onDeactivated(cancel);
   color: var(--textSecondary);
 }
 .download-option {
+  box-sizing: border-box;
   display: flex;
   min-height: 2.75rem;
   align-items: center;
@@ -203,10 +209,22 @@ onDeactivated(cancel);
   border-radius: 0.5rem;
   font-size: 0.95rem;
   font-weight: 500;
+  line-height: normal;
+  text-align: center;
   text-transform: none;
 }
 .zip-option {
   border: 1px solid var(--borderPrimary);
+}
+.zip-option,
+.zip-option:hover,
+.zip-option:visited {
+  color: var(--dark-blue);
+  text-decoration: none;
+}
+.zip-option[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .share-download .button:focus-visible {
   outline: 2px solid var(--blue);

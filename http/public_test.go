@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,6 +56,62 @@ func TestPublicFolderZIPOmitsInProgressUploads(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("archive omitted the completed file")
+	}
+}
+
+func TestCopiedShareZIPLinkKeepsSelectionAndAccessRules(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "shared"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"photo, one.jpg", "another.jpg", "unselected.jpg"} {
+		if err := os.WriteFile(filepath.Join(root, "shared", name), []byte("file"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true}, []byte("copied-zip"))
+	link := &share.Link{Hash: "copied", Path: "/shared", UserID: 1, PasswordHash: "protected", Token: "share-token"}
+	if err := st.Share.Save(link); err != nil {
+		t.Fatal(err)
+	}
+	handler := handle(publicDlHandler, "/api/public/dl/", st, &settings.Server{})
+	query := url.Values{
+		"algo":  {"zip"},
+		"files": {strings.ReplaceAll(url.QueryEscape("/photo, one.jpg"), "+", "%20") + "," + url.QueryEscape("/another.jpg")},
+	}
+	request := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/public/dl/copied/?"+query.Encode(), nil))
+		return rec
+	}
+	if rec := request(); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("protected ZIP without token returned %d", rec.Code)
+	}
+	query.Set("token", link.Token)
+	rec := request()
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("copied ZIP request returned %d", rec.Code)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected := map[string]bool{"photo, one.jpg": true, "another.jpg": true}
+	for _, entry := range archive.File {
+		if !selected[entry.Name] {
+			t.Fatalf("copied ZIP included an unexpected entry: %q", entry.Name)
+		}
+		delete(selected, entry.Name)
+	}
+	if len(selected) != 0 {
+		t.Fatalf("copied ZIP omitted selected entries: %v", selected)
+	}
+	link.Expire = 1
+	if err := st.Share.Save(link); err != nil {
+		t.Fatal(err)
+	}
+	if rec := request(); rec.Code != http.StatusNotFound {
+		t.Fatalf("expired copied ZIP returned %d", rec.Code)
 	}
 }
 
