@@ -575,6 +575,8 @@ const download = () => {
     zipChecks: urls,
     individualURLs: async () => urls,
     includesFolders,
+    fileCount: files.length,
+    fileCountScope: includesFolders ? "selected" : undefined,
     selectedBytes,
   });
 };
@@ -585,6 +587,8 @@ const downloadFolder = () => {
   const sharePassword = password.value;
   openShareDownload({
     archiveURL: api.getDownloadURL(share),
+    fileCount: share.numFiles,
+    fileCountScope: share.numDirs > 0 ? "current-folder" : undefined,
     individualURLs: (signal) =>
       api.getFolderFileDownloadURLs(share, sharePassword, signal),
   });
@@ -595,18 +599,22 @@ function openShareDownload({
   zipChecks = [],
   individualURLs,
   includesFolders = false,
+  fileCount,
+  fileCountScope,
   selectedBytes,
 }: {
   archiveURL: string;
   zipChecks?: string[];
   individualURLs: (signal: AbortSignal) => Promise<string[]>;
   includesFolders?: boolean;
+  fileCount?: number;
+  fileCountScope?: "selected" | "current-folder";
   selectedBytes?: number;
 }) {
   const openedOn = route.fullPath;
   layoutStore.showHover({
     prompt: "share-download",
-    props: { includesFolders, selectedBytes },
+    props: { includesFolders, fileCount, fileCountScope, selectedBytes },
     confirm: async (mode: "all" | "zip", signal: AbortSignal) => {
       if (mode === "all" && includesFolders) return;
       const downloads =
@@ -690,10 +698,14 @@ onBeforeUnmount(() => {
 
 .share__box__element .share-download-cta {
   display: inline-flex;
-  min-height: 2.75rem;
+  min-height: 2.5rem;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .share-download-cta:hover {
@@ -753,22 +765,27 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 736px) {
+  .share__box__element .share-download-cta {
+    min-height: 2.75rem;
+  }
+
   #listing.list :deep(.shared-listing-item .listing-details) {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 0.75rem;
+    grid-template-columns: fit-content(65%) minmax(0, 1fr);
+    column-gap: 0.35rem;
     row-gap: 0.2rem;
     min-width: 0;
   }
 
   #listing.list :deep(.shared-listing-item .listing-details > .name) {
-    grid-area: 1 / 1;
+    grid-area: 1 / 1 / 2 / -1;
     width: auto;
   }
 
-  #listing.list :deep(.shared-listing-item[data-dir="false"] .size) {
+  #listing.list :deep(.shared-listing-item .listing-details > .modified),
+  #listing.list
+    :deep(.shared-listing-item[data-dir="false"] .listing-details > .size) {
     display: block;
-    grid-area: 2 / 1;
     width: auto;
     color: var(--textSecondary);
     font-size: 0.75rem;
@@ -776,13 +793,31 @@ onBeforeUnmount(() => {
     white-space: nowrap;
   }
 
-  #listing.list :deep(.shared-listing-item[aria-selected="true"] .size) {
-    color: inherit;
+  #listing.list :deep(.shared-listing-item .listing-details > .modified) {
+    grid-area: 2 / 1;
   }
 
-  #listing.list :deep(.shared-listing-item .listing-details > .modified) {
-    grid-area: 1 / 2 / span 2;
-    width: auto;
+  #listing.list
+    :deep(.shared-listing-item[data-dir="true"] .listing-details > .modified) {
+    grid-column: 1 / -1;
+  }
+
+  #listing.list :deep(.shared-listing-item[data-dir="false"] .size) {
+    grid-area: 2 / 2;
+  }
+
+  #listing.list :deep(.shared-listing-item[data-dir="false"] .size::before) {
+    content: "·";
+    margin-inline-end: 0.35rem;
+  }
+
+  #listing.list
+    :deep(
+      .shared-listing-item[aria-selected="true"]
+        .listing-details
+        > :is(.size, .modified)
+    ) {
+    color: inherit;
   }
 }
 

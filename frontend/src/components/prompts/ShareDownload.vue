@@ -9,17 +9,22 @@
     </div>
 
     <div class="card-content">
-      <p v-if="selectedSize" class="download-total">
-        <strong
-          >{{
-            t(
-              includesFolders
-                ? "prompts.shareDownloadSelectedSize"
-                : "prompts.shareDownloadTotalSize"
-            )
-          }}:</strong
-        >
-        {{ selectedSize }}
+      <p v-if="fileCount !== undefined || selectedSize" class="download-total">
+        <span v-if="fileCount !== undefined">
+          <strong>{{ t(fileCountLabel) }}:</strong> {{ n(fileCount) }}
+        </span>
+        <span v-if="selectedSize">
+          <strong
+            >{{
+              t(
+                includesFolders
+                  ? "prompts.shareDownloadSelectedSize"
+                  : "prompts.shareDownloadTotalSize"
+              )
+            }}:</strong
+          >
+          {{ selectedSize }}
+        </span>
       </p>
       <p class="download-hint">
         {{
@@ -78,11 +83,20 @@ import { StatusError } from "@/api/utils";
 import { ShareFolderDownloadError } from "@/api/pub";
 import GallerySpinner from "@/components/files/GallerySpinner.vue";
 
-const { t } = useI18n();
+const { t, n } = useI18n();
 const layoutStore = useLayoutStore();
 const includesFolders = computed(
   () => !!layoutStore.currentPrompt?.props?.includesFolders
 );
+const fileCount = computed<number | undefined>(
+  () => layoutStore.currentPrompt?.props?.fileCount
+);
+const fileCountLabel = computed(() => {
+  const scope = layoutStore.currentPrompt?.props?.fileCountScope;
+  if (scope === "selected") return "prompts.shareDownloadSelectedFiles";
+  if (scope === "current-folder") return "prompts.shareDownloadCurrentFiles";
+  return "prompts.totalFiles";
+});
 const selectedSize = computed(() => {
   const bytes = layoutStore.currentPrompt?.props?.selectedBytes;
   return typeof bytes === "number" && Number.isFinite(bytes) && bytes >= 0
@@ -152,8 +166,25 @@ onDeactivated(cancel);
   width: min(23rem, calc(100vw - 2rem));
   max-height: min(95%, calc(100dvh - 2rem));
   overflow-y: auto;
+  border-radius: 0.7rem;
+}
+.share-download .card-title {
+  padding: 1.15rem 1.15rem 0.55rem;
+}
+.share-download .card-content {
+  padding: 0.65rem 1.15rem 0.35rem;
+}
+.share-download .card-action {
+  padding: 0.35rem 1.15rem 0.9rem;
+}
+.share-download .card-action .button {
+  min-height: 2.5rem;
+  border-radius: 0.45rem;
 }
 .download-total {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
   margin: 0 0 0.65rem;
   font-size: 1rem;
 }
@@ -168,9 +199,18 @@ onDeactivated(cancel);
   justify-content: center;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-transform: none;
 }
 .zip-option {
   border: 1px solid var(--borderPrimary);
+}
+.share-download .button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 .download-option .material-icons,
 .download-option :deep(.gallery-spinner) {
