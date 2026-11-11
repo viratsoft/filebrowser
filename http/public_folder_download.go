@@ -85,11 +85,12 @@ func collectPublicFolderDownload(ctx context.Context, d *data, root string, mani
 				if strings.Contains(info.Name(), "\\") || !d.Check(canonical) || isPublicUploadTempPath(canonical) {
 					continue
 				}
-				if info.IsDir() {
+				switch {
+				case info.IsDir():
 					pending = append(pending, name)
-				} else if !info.Mode().IsRegular() {
+				case !info.Mode().IsRegular():
 					continue
-				} else if manifest {
+				case manifest:
 					plan.Paths = append(plan.Paths, canonical)
 				}
 				if !manifest {
