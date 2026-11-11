@@ -9,20 +9,59 @@
     </div>
 
     <div class="card-content">
-      <p v-if="fileCount !== undefined || selectedSize" class="download-total">
+      <div
+        v-if="calculateTotals"
+        class="download-folder-details"
+        :aria-busy="counting"
+      >
+        <strong>{{ t("prompts.folderDetails") }}:</strong>
+        <button
+          type="button"
+          class="button button--flat calculate-details"
+          :class="{ 'calculate-details-icon': counting || calculatedTotals }"
+          :disabled="counting || busy !== null"
+          :aria-label="
+            t(
+              counting
+                ? 'prompts.calculatingSize'
+                : calculatedTotals
+                  ? 'prompts.refreshFolderDetails'
+                  : 'prompts.calculateFolderDetails'
+            )
+          "
+          :title="
+            calculatedTotals && !counting
+              ? t('prompts.refreshFolderDetails')
+              : undefined
+          "
+          @click="loadCount"
+        >
+          <gallery-spinner
+            v-if="counting"
+            :label="t('prompts.calculatingSize')"
+          />
+          <i
+            v-else-if="calculatedTotals"
+            class="material-icons"
+            aria-hidden="true"
+            >refresh</i
+          >
+          <template v-else>{{ t("prompts.calculateFolderDetails") }}</template>
+        </button>
+      </div>
+      <p v-else-if="counting" class="download-hint" role="status">
+        {{ t("prompts.shareDownloadPreparingTotals") }}
+      </p>
+      <p
+        v-if="fileCount !== undefined || selectedSize"
+        class="download-total"
+        aria-live="polite"
+      >
         <span v-if="fileCount !== undefined">
-          <strong>{{ t(fileCountLabel) }}:</strong> {{ n(fileCount) }}
+          <strong>{{ t("prompts.totalFiles") }}:</strong> {{ n(fileCount) }}
         </span>
         <span v-if="selectedSize">
-          <strong
-            >{{
-              t(
-                includesFolders
-                  ? "prompts.shareDownloadSelectedSize"
-                  : "prompts.shareDownloadTotalSize"
-              )
-            }}:</strong
-          >
+          <strong>{{ t("prompts.shareDownloadTotalSize") }}:</strong>
           {{ selectedSize }}
         </span>
       </p>
@@ -39,7 +78,13 @@
         :id="includesFolders ? undefined : 'focus-prompt'"
         type="button"
         class="button button--block download-option"
-        :disabled="busy !== null || includesFolders"
+        :disabled="
+          busy !== null ||
+          includesFolders ||
+          counting ||
+          needsCount ||
+          fileCount === 0
+        "
         :aria-busy="busy === 'all'"
         @click="start('all')"
       >
@@ -51,9 +96,9 @@
         :id="includesFolders ? 'focus-prompt' : undefined"
         :href="archiveURL"
         class="button button--block button--flat download-option zip-option"
-        :aria-disabled="busy !== null"
+        :aria-disabled="busy !== null || counting || needsCount"
         :aria-busy="busy === 'zip'"
-        :tabindex="busy === null ? undefined : -1"
+        :tabindex="busy === null && !counting && !needsCount ? undefined : -1"
         referrerpolicy="no-referrer"
         @click.prevent="start('zip')"
       >
@@ -62,6 +107,14 @@
         {{ t("prompts.shareDownloadZip") }}
       </a>
       <p v-if="error" class="download-error" role="alert">{{ error }}</p>
+      <button
+        v-if="needsCount && !counting"
+        type="button"
+        class="button button--flat"
+        @click="loadCount"
+      >
+        {{ t("prompts.shareDownloadRetryTotals") }}
+      </button>
     </div>
 
     <div class="card-action">
@@ -77,12 +130,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onDeactivated, ref } from "vue";
+import { computed, onBeforeUnmount, onDeactivated, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { filesize } from "filesize";
 import { useLayoutStore } from "@/stores/layout";
 import { StatusError } from "@/api/utils";
-import { ShareFolderDownloadError } from "@/api/pub";
 import GallerySpinner from "@/components/files/GallerySpinner.vue";
 
 const { t, n } = useI18n();
@@ -93,17 +145,29 @@ const includesFolders = computed(
 const archiveURL = computed<string | undefined>(
   () => layoutStore.currentPrompt?.props?.archiveURL
 );
-const fileCount = computed<number | undefined>(
-  () => layoutStore.currentPrompt?.props?.fileCount
+const prepare = computed<
+  ((signal: AbortSignal) => Promise<number>) | undefined
+>(() => layoutStore.currentPrompt?.props?.prepare);
+const calculateTotals = computed<
+  | ((signal: AbortSignal) => Promise<{ fileCount: number; size: number }>)
+  | undefined
+>(() => layoutStore.currentPrompt?.props?.calculateTotals);
+const calculatedTotals = ref<{ fileCount: number; size: number }>();
+const recursiveCount = ref<number>();
+const counting = ref(false);
+const needsCount = computed(
+  () => !!prepare.value && recursiveCount.value === undefined
 );
-const fileCountLabel = computed(() => {
-  const scope = layoutStore.currentPrompt?.props?.fileCountScope;
-  if (scope === "selected") return "prompts.shareDownloadSelectedFiles";
-  if (scope === "current-folder") return "prompts.shareDownloadCurrentFiles";
-  return "prompts.totalFiles";
-});
+const fileCount = computed<number | undefined>(() =>
+  prepare.value
+    ? recursiveCount.value
+    : (calculatedTotals.value?.fileCount ??
+      layoutStore.currentPrompt?.props?.fileCount)
+);
 const selectedSize = computed(() => {
-  const bytes = layoutStore.currentPrompt?.props?.selectedBytes;
+  const bytes =
+    calculatedTotals.value?.size ??
+    layoutStore.currentPrompt?.props?.selectedBytes;
   return typeof bytes === "number" && Number.isFinite(bytes) && bytes >= 0
     ? filesize(bytes, { base: 10, symbols: { kB: "KB" } })
     : "";
@@ -112,10 +176,39 @@ const busy = ref<"all" | "zip" | null>(null);
 const error = ref("");
 let active: AbortController | null = null;
 
+async function loadCount() {
+  const prepareCount = prepare.value;
+  const calculate = calculateTotals.value;
+  if ((!prepareCount && !calculate) || active) return;
+  const controller = new AbortController();
+  active = controller;
+  counting.value = true;
+  error.value = "";
+  try {
+    if (calculate) {
+      const totals = await calculate(controller.signal);
+      if (active === controller) calculatedTotals.value = totals;
+    } else if (prepareCount) {
+      const count = await prepareCount(controller.signal);
+      if (active === controller) recursiveCount.value = count;
+    }
+  } catch {
+    if (active === controller) error.value = t("prompts.shareDownloadError");
+  } finally {
+    if (active === controller) {
+      active = null;
+      counting.value = false;
+    }
+  }
+}
+
 function cancel() {
   active?.abort();
   active = null;
   busy.value = null;
+  counting.value = false;
+  recursiveCount.value = undefined;
+  calculatedTotals.value = undefined;
   error.value = "";
 }
 
@@ -124,7 +217,9 @@ async function start(mode: "all" | "zip") {
   if (
     !prompt?.confirm ||
     busy.value ||
-    (mode === "all" && includesFolders.value)
+    counting.value ||
+    needsCount.value ||
+    (mode === "all" && (includesFolders.value || fileCount.value === 0))
   )
     return;
 
@@ -142,15 +237,11 @@ async function start(mode: "all" | "zip") {
       const status =
         failure instanceof StatusError ? failure.status : undefined;
       error.value = t(
-        failure instanceof ShareFolderDownloadError
-          ? failure.reason === "empty"
-            ? "prompts.shareDownloadEmpty"
-            : "prompts.shareDownloadLinkedFolder"
-          : status === 401 || status === 403
-            ? "prompts.shareDownloadAccessError"
-            : status === 404
-              ? "prompts.shareDownloadMissing"
-              : "prompts.shareDownloadError"
+        status === 401 || status === 403
+          ? "prompts.shareDownloadAccessError"
+          : status === 404
+            ? "prompts.shareDownloadMissing"
+            : "prompts.shareDownloadError"
       );
     }
   } finally {
@@ -162,6 +253,14 @@ async function start(mode: "all" | "zip") {
   }
 }
 
+watch(
+  [prepare, calculateTotals],
+  () => {
+    cancel();
+    if (prepare.value) void loadCount();
+  },
+  { immediate: true }
+);
 onBeforeUnmount(cancel);
 onDeactivated(cancel);
 </script>
@@ -185,6 +284,33 @@ onDeactivated(cancel);
 .share-download .card-action .button {
   min-height: 2.5rem;
   border-radius: 0.45rem;
+}
+.download-folder-details {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.5rem;
+  margin-bottom: 0.45rem;
+}
+.calculate-details {
+  min-height: 2.5rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.45rem;
+  font-size: 0.9rem;
+  text-transform: none;
+}
+.calculate-details-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  padding: 0;
+}
+.calculate-details-icon .material-icons,
+.calculate-details-icon :deep(.gallery-spinner) {
+  width: 1.15rem;
+  height: 1.15rem;
+  font-size: 1.15rem;
+  color: inherit;
 }
 .download-total {
   display: flex;

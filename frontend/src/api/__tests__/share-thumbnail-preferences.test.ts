@@ -96,44 +96,36 @@ describe("share thumbnail preferences and URLs", () => {
     );
   });
 
-  it("collects individual files from the current shared folder and its subfolders", async () => {
+  it("prepares the current folder with a scoped share request", async () => {
     vi.mocked(removePrefix).mockImplementation((value) =>
       value.replace(/^\/share/, "")
     );
-    vi.mocked(fetchURL)
-      .mockResolvedValueOnce({
-        json: async () => ({
-          isDir: true,
-          items: [
-            { name: "direct.jpg", path: "/current/direct.jpg" },
-            { name: "nested", isDir: true },
-          ],
-        }),
-      } as Response)
-      .mockResolvedValueOnce({
-        json: async () => ({
-          isDir: true,
-          items: [{ name: "nested.mp4", path: "/current/nested/nested.mp4" }],
-        }),
-      } as Response);
+    vi.mocked(fetchURL).mockResolvedValueOnce({
+      json: async () => ({ paths: ["/nested/photo.jpg"] }),
+    } as Response);
+    const folder = {
+      hash: "hash",
+      token: "share-token",
+      url: "/share/hash/nested/",
+      path: "/nested",
+    } as Resource;
     const signal = new AbortController().signal;
-    const urls = await publicApi.getFolderFileDownloadURLs(
+    expect(
+      await publicApi.prepareFolderDownload(folder, "secret", signal)
+    ).toEqual({ paths: ["/nested/photo.jpg"] });
+    expect(fetchURL).toHaveBeenCalledWith(
+      "/api/public/folder-download/hash/nested/?manifest=1&token=share-token",
       {
-        hash: "hash",
-        token: "share-token",
-        url: "/share/hash/current/",
-      } as Resource,
-      "share-password",
-      signal
-    );
-    expect(urls).toHaveLength(2);
-    expect(fetchURL).toHaveBeenLastCalledWith(
-      "/api/public/share/hash/current/nested/?token=share-token",
-      { headers: { "X-SHARE-PASSWORD": "share-password" }, signal },
+        headers: { "X-SHARE-PASSWORD": "secret" },
+        signal,
+        cache: "no-store",
+        referrerPolicy: "no-referrer",
+      },
       false
     );
+    publicApi.getFolderArchiveURL(folder);
     expect(createURL).toHaveBeenCalledWith(
-      "api/public/dl/hash/current/nested/nested.mp4",
+      "api/public/folder-download/hash/nested",
       { token: "share-token" }
     );
   });

@@ -120,36 +120,48 @@ export function getZipDownloadURL(
   });
 }
 
-export class ShareFolderDownloadError extends Error {
-  constructor(public reason: "empty" | "linked-folder") {
-    super(reason);
-  }
+export function getFolderArchiveURL(folder: Resource) {
+  return createURL("api/public/folder-download/" + folder.hash + folder.path, {
+    ...(folder.token && { token: folder.token }),
+  });
 }
 
-export async function getFolderFileDownloadURLs(
+export async function getZipDownloadTotals(
+  archiveURL: string,
+  password: string,
+  signal: AbortSignal
+): Promise<{ fileCount: number; size: number }> {
+  const url = new URL(archiveURL);
+  url.searchParams.set("manifest", "totals");
+  const response = await globalThis.fetch(url, {
+    signal,
+    cache: "no-store",
+    redirect: "error",
+    referrerPolicy: "no-referrer",
+    headers: { "X-SHARE-PASSWORD": encodeURIComponent(password) },
+  });
+  if (!response.ok) throw new StatusError(response.statusText, response.status);
+  return response.json();
+}
+
+export async function prepareFolderDownload(
   folder: Resource,
   password: string,
   signal: AbortSignal
-) {
-  const urls: string[] = [];
-  const pending = [folder.url];
-  while (pending.length && !signal.aborted) {
-    const current = pending.pop()!;
-    const listing = await fetch(current, password, signal, folder.token);
-    if (!listing.isDir || listing.uploadOnly) throw new StatusError("", 403);
-    for (const item of listing.items) {
-      if (item.isDir) {
-        // Linked folders can lead back to an ancestor. ZIP remains available.
-        if (item.isSymlink) throw new ShareFolderDownloadError("linked-folder");
-        pending.push(item.url);
-      } else {
-        urls.push(getDownloadURL({ ...folder, path: item.path }));
-      }
-    }
-  }
-  if (!signal.aborted && !urls.length)
-    throw new ShareFolderDownloadError("empty");
-  return urls;
+): Promise<{ paths: string[] }> {
+  const query = new URLSearchParams({ manifest: "1" });
+  if (folder.token) query.set("token", folder.token);
+  const response = await fetchURL(
+    `/api/public/folder-download${removePrefix(folder.url)}?${query}`,
+    {
+      signal,
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+      headers: { "X-SHARE-PASSWORD": encodeURIComponent(password) },
+    },
+    false
+  );
+  return response.json();
 }
 
 export async function checkDownloads(urls: string[], signal: AbortSignal) {

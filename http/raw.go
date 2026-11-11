@@ -1,6 +1,7 @@
 package fbhttp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -104,7 +105,10 @@ var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) 
 	return rawDirHandler(w, r, d, file)
 })
 
-func getFiles(d *data, path, commonPath string) ([]archives.FileInfo, error) {
+func getFiles(ctx context.Context, d *data, path, commonPath string) ([]archives.FileInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !d.Check(path) || (d.rawShare != nil && isPublicUploadTempPath(slashClean(path))) {
 		return nil, nil
 	}
@@ -157,8 +161,11 @@ func getFiles(d *data, path, commonPath string) ([]archives.FileInfo, error) {
 
 		for _, name := range names {
 			fPath := filepath.Join(path, name)
-			subFiles, err := getFiles(d, fPath, commonPath)
+			subFiles, err := getFiles(ctx, d, fPath, commonPath)
 			if err != nil {
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
 				log.Printf("Failed to get files from %s: %v", fPath, err)
 				continue
 			}
@@ -180,16 +187,45 @@ func rawDirHandler(w http.ResponseWriter, r *http.Request, d *data, file *files.
 		return http.StatusInternalServerError, err
 	}
 
+	totalsOnly := d.rawShare != nil && r.URL.Query().Get("manifest") == "totals"
+	if totalsOnly {
+		select {
+		case publicFolderDownloadSlots <- struct{}{}:
+			defer func() { <-publicFolderDownloadSlots }()
+		default:
+			return http.StatusServiceUnavailable, nil
+		}
+	}
 	commonDir := fileutils.CommonPrefix(filepath.Separator, filenames...)
 
 	var allFiles []archives.FileInfo
 	for _, fname := range filenames {
-		archiveFiles, err := getFiles(d, fname, commonDir)
+		if r.Context().Err() != nil {
+			return 0, nil
+		}
+		archiveFiles, err := getFiles(r.Context(), d, fname, commonDir)
 		if err != nil {
 			log.Printf("Failed to get files from %s: %v", fname, err)
 			continue
 		}
 		allFiles = append(allFiles, archiveFiles...)
+	}
+
+	if r.Context().Err() != nil {
+		return 0, nil
+	}
+	if totalsOnly {
+		var totals struct {
+			FileCount int   `json:"fileCount"`
+			Size      int64 `json:"size"`
+		}
+		for _, entry := range allFiles {
+			if entry.Mode().IsRegular() {
+				totals.FileCount++
+				totals.Size += entry.Size()
+			}
+		}
+		return renderJSON(w, r, totals)
 	}
 
 	name := filepath.Base(commonDir)

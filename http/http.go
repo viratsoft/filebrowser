@@ -103,6 +103,7 @@ func NewHandler(
 	public.PathPrefix("/tus").Handler(monkey(publicTusPatchHandler(uploadCache), "/api/public/tus/")).Methods("PATCH")
 	public.PathPrefix("/upload").Handler(monkey(publicUploadHandler, "/api/public/upload/")).Methods("POST")
 	public.PathPrefix("/share").Handler(monkey(publicShareHandler, "/api/public/share/")).Methods("GET")
+	public.PathPrefix("/folder-download/").Handler(monkey(publicFolderDownloadHandler, "/api/public/folder-download/")).Methods("GET")
 	public.PathPrefix("/size/").Handler(monkey(publicFolderSizeHandler, "/api/public/size/")).Methods("GET")
 
 	return stripPrefix(server.BaseURL, r), nil

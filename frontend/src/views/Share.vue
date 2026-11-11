@@ -570,14 +570,18 @@ const download = () => {
     return;
   }
 
+  const sharePassword = password.value;
+  const archiveURL = api.getZipDownloadURL(hash.value, token.value, paths);
   openShareDownload({
-    archiveURL: api.getZipDownloadURL(hash.value, token.value, paths),
+    archiveURL,
     zipChecks: urls,
     individualURLs: async () => urls,
     includesFolders,
-    fileCount: files.length,
-    fileCountScope: includesFolders ? "selected" : undefined,
-    selectedBytes,
+    fileCount: includesFolders ? undefined : files.length,
+    selectedBytes: includesFolders ? undefined : selectedBytes,
+    calculateTotals: includesFolders
+      ? (signal) => api.getZipDownloadTotals(archiveURL, sharePassword, signal)
+      : undefined,
   });
 };
 
@@ -585,12 +589,20 @@ const downloadFolder = () => {
   const share = req.value;
   if (!share?.isDir || share.uploadOnly || layoutStore.loading) return;
   const sharePassword = password.value;
+  let paths: string[] = [];
   openShareDownload({
-    archiveURL: api.getDownloadURL(share),
-    fileCount: share.numFiles,
-    fileCountScope: share.numDirs > 0 ? "current-folder" : undefined,
-    individualURLs: (signal) =>
-      api.getFolderFileDownloadURLs(share, sharePassword, signal),
+    archiveURL: api.getFolderArchiveURL(share),
+    prepare: async (signal) => {
+      const plan = await api.prepareFolderDownload(
+        share,
+        sharePassword,
+        signal
+      );
+      paths = plan.paths;
+      return paths.length;
+    },
+    individualURLs: async () =>
+      paths.map((path) => api.getDownloadURL({ ...share, path })),
   });
 };
 
@@ -600,16 +612,20 @@ function openShareDownload({
   individualURLs,
   includesFolders = false,
   fileCount,
-  fileCountScope,
+  calculateTotals,
   selectedBytes,
+  prepare,
 }: {
   archiveURL: string;
   zipChecks?: string[];
   individualURLs: (signal: AbortSignal) => Promise<string[]>;
   includesFolders?: boolean;
   fileCount?: number;
-  fileCountScope?: "selected" | "current-folder";
+  calculateTotals?: (
+    signal: AbortSignal
+  ) => Promise<{ fileCount: number; size: number }>;
   selectedBytes?: number;
+  prepare?: (signal: AbortSignal) => Promise<number>;
 }) {
   const openedOn = route.fullPath;
   layoutStore.showHover({
@@ -618,8 +634,9 @@ function openShareDownload({
       archiveURL,
       includesFolders,
       fileCount,
-      fileCountScope,
+      calculateTotals,
       selectedBytes,
+      prepare,
     },
     confirm: async (mode: "all" | "zip", signal: AbortSignal) => {
       if (mode === "all" && includesFolders) return;
@@ -627,7 +644,11 @@ function openShareDownload({
         mode === "zip" ? [archiveURL] : await individualURLs(signal);
       if (signal.aborted || route.fullPath !== openedOn) return;
       await api.checkDownloads(
-        mode === "zip" ? [...zipChecks, archiveURL] : downloads,
+        mode === "zip"
+          ? prepare
+            ? zipChecks
+            : [...zipChecks, archiveURL]
+          : downloads,
         signal
       );
       if (signal.aborted || route.fullPath !== openedOn) return;

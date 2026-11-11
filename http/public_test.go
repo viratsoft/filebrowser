@@ -106,6 +106,12 @@ func TestCopiedShareZIPLinkKeepsSelectionAndAccessRules(t *testing.T) {
 	if len(selected) != 0 {
 		t.Fatalf("copied ZIP omitted selected entries: %v", selected)
 	}
+	query.Set("manifest", "totals")
+	totals := request()
+	if totals.Code != http.StatusOK || strings.TrimSpace(totals.Body.String()) != "{\"fileCount\":2,\"size\":8}" {
+		t.Fatalf("unexpected selected archive totals: %d %s", totals.Code, totals.Body.String())
+	}
+	query.Del("manifest")
 	link.Expire = 1
 	if err := st.Share.Save(link); err != nil {
 		t.Fatal(err)
