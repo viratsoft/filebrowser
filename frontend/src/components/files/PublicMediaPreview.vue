@@ -24,6 +24,19 @@
         :disabled="layout.loading || navigating"
         @toggle="toggleQuality"
       />
+      <a
+        v-if="downloadURL"
+        class="action"
+        :class="{ disabled: downloadDisabled }"
+        :href="downloadDisabled ? undefined : downloadURL"
+        :aria-disabled="downloadDisabled"
+        :aria-label="t('buttons.download')"
+        :title="t('buttons.download')"
+        referrerpolicy="no-referrer"
+        download
+      >
+        <i class="material-icons" aria-hidden="true">file_download</i>
+      </a>
     </header-bar>
     <div
       class="preview"
@@ -126,6 +139,14 @@ let disposed = false;
 
 const effectiveOriginal = computed(
   () => props.original || !props.file.allowImagePreview
+);
+const downloadDisabled = computed(() => layout.loading || navigating.value);
+const downloadURL = computed(() =>
+  props.file.type === "image" &&
+  !props.file.uploadOnly &&
+  (!props.password || props.file.token)
+    ? api.getDownloadURL(props.file)
+    : ""
 );
 const mediaURL = computed(() =>
   props.file.uploadOnly

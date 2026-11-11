@@ -28,7 +28,8 @@ vi.mock("@/api", () => ({
   pub: {
     fetch: harness.fetch,
     fetchImage: harness.fetchImage,
-    getDownloadURL: (file: Resource) => `original:${file.hash}:${file.path}`,
+    getDownloadURL: (file: Resource, inline = false) =>
+      `${inline ? "original" : "download"}:${file.hash}:${file.path}`,
     getImagePreviewURL: (file: Resource) => `preview:${file.hash}:${file.path}`,
   },
 }));
@@ -143,6 +144,20 @@ describe("public gallery navigation and quality", () => {
     await nextTick();
     expect(view.siblings.value).toHaveLength(0);
     expect(view.currentIndex.value).toBe(-1);
+  });
+
+  it("offers the original download only for readable share image slides", async () => {
+    const { props, view } = await setup();
+    expect(view.downloadURL.value).toBe("download:hash:/a.jpg");
+    props.original = true;
+    await nextTick();
+    expect(view.downloadURL.value).toBe("download:hash:/a.jpg");
+    props.file = { ...photo("video.mp4"), type: "video" };
+    await nextTick();
+    expect(view.downloadURL.value).toBe("");
+    props.file = { ...photo(), uploadOnly: true };
+    await nextTick();
+    expect(view.downloadURL.value).toBe("");
   });
 
   it("does not issue media/listing requests for upload-only data", async () => {
