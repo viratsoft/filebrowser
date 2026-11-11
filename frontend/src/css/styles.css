@@ -219,6 +219,7 @@ main .spinner .bounce2 {
 /* Keep the image's full fitted viewport stable when the toolbar hides.
    Other media retain their existing layout and touch controls. */
 #previewer.image-gallery {
+  background-color: #000;
   height: 100dvh;
 }
 

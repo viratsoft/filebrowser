@@ -106,7 +106,6 @@ describe("gallery navigation lifecycle", () => {
     resolveOld({ items: [item("a", "one.jpg"), item("a", "private.jpg")] });
     await old;
     expect(view.nextLink.value).toBe("/files/b/two.mp4");
-    expect(view.nextRaw.value).toBe("");
   });
 
   it("aborts metadata loading on close without applying the late response", async () => {
@@ -140,7 +139,11 @@ describe("gallery navigation lifecycle", () => {
 
   it("preserves video slides while preventing duplicate in-flight navigation", async () => {
     harness.fetch.mockResolvedValue({
-      items: [item("a", "one.jpg"), item("a", "two.mp4", "video")],
+      items: [
+        item("a", "one.jpg"),
+        item("a", "document.pdf", "blob"),
+        item("a", "two.mp4", "video"),
+      ],
     });
     let finish!: () => void;
     harness.replace.mockReturnValue(
@@ -150,13 +153,19 @@ describe("gallery navigation lifecycle", () => {
     );
     const view = setup();
     await view.updatePreview();
+    expect(view.galleryPosition.value).toBe(1);
+    expect(
+      view.galleryItems.value.map((slide: ResourceItem) => slide.name)
+    ).toEqual(["one.jpg", "two.mp4"]);
     const pending = view.next();
+    expect(view.changingSlide.value).toBe(true);
     await view.next();
     expect(harness.replace).toHaveBeenCalledExactlyOnceWith({
       path: "/files/a/two.mp4",
     });
     finish();
     await pending;
+    expect(view.changingSlide.value).toBe(false);
     harness.layout.loading = true;
     await view.next();
     expect(harness.replace).toHaveBeenCalledTimes(1);

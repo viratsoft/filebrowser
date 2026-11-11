@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope, nextTick, reactive } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 import PublicMediaPreview from "../PublicMediaPreview.vue";
 
 const harness = vi.hoisted(() => ({
   unmount: [] as Array<() => void>,
   fetch: vi.fn(),
   fetchImage: vi.fn(),
-  push: vi.fn(),
+  replace: vi.fn(),
 }));
 vi.mock("vue", async (original) => ({
   ...(await original<typeof import("vue")>()),
@@ -15,7 +16,10 @@ vi.mock("vue", async (original) => ({
   onMounted: vi.fn(),
   onBeforeUnmount: (callback: () => void) => harness.unmount.push(callback),
 }));
-vi.mock("vue-router", () => ({ useRouter: () => ({ push: harness.push }) }));
+vi.mock("vue-router", async (original) => ({
+  ...(await original<typeof import("vue-router")>()),
+  useRouter: () => ({ replace: harness.replace }),
+}));
 vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock("@/stores/layout", () => ({
   useLayoutStore: () => ({ loading: false, currentPrompt: null }),
@@ -57,7 +61,7 @@ beforeEach(() => {
   harness.unmount.length = 0;
   harness.fetch.mockReset();
   harness.fetchImage.mockReset();
-  harness.push.mockReset();
+  harness.replace.mockReset();
   harness.fetch.mockResolvedValue({
     isDir: true,
     items: [photo(), photo("b.jpg")],
@@ -73,7 +77,44 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("public gallery HD preference", () => {
+describe("public gallery navigation and quality", () => {
+  it("returns directly to the folder on Back after multiple slides", async () => {
+    const folder = "/share/hash/";
+    const second = photo("b.jpg");
+    const third = photo("c.jpg");
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/share/:path(.*)*", component: {} }],
+    });
+    harness.replace.mockImplementation((location) => router.replace(location));
+    harness.fetch.mockResolvedValue({
+      isDir: true,
+      items: [photo(), second, third],
+    });
+    await router.push(folder);
+    await router.push(photo().url);
+
+    const { props, view } = await setup();
+    await view.go(view.next.value);
+    expect(router.currentRoute.value.path).toBe(second.url);
+    props.file = second;
+    await nextTick();
+    expect(view.currentIndex.value + 1).toBe(2);
+    expect(view.siblings.value).toHaveLength(3);
+    await view.go(view.next.value);
+    expect(router.currentRoute.value.path).toBe(third.url);
+
+    const back = new Promise<void>((resolve) => {
+      const unsubscribe = router.afterEach(() => {
+        unsubscribe();
+        resolve();
+      });
+    });
+    router.back();
+    await back;
+    expect(router.currentRoute.value.path).toBe(folder);
+  });
+
   it("keeps the selected quality on next images and across a video slide", async () => {
     const { props, emit, view } = await setup();
     expect(view.source.value).toBe("preview:hash:/a.jpg");
@@ -92,6 +133,16 @@ describe("public gallery HD preference", () => {
     await nextTick();
     expect(view.source.value).toBe("preview:hash:/b.jpg");
     expect(harness.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the old slide count when share credentials change", async () => {
+    const { props, view } = await setup();
+    expect(view.siblings.value).toHaveLength(2);
+    harness.fetch.mockRejectedValueOnce(new Error("unauthorized"));
+    props.file = { ...props.file, token: "different-share-token" };
+    await nextTick();
+    expect(view.siblings.value).toHaveLength(0);
+    expect(view.currentIndex.value).toBe(-1);
   });
 
   it("does not issue media/listing requests for upload-only data", async () => {

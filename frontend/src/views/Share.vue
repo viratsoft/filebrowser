@@ -429,6 +429,7 @@ import QrcodeVue from "qrcode.vue";
 import Item from "@/components/files/ListingItem.vue";
 import PublicMediaPreview from "@/components/files/PublicMediaPreview.vue";
 import urlUtils from "@/utils/url";
+import { closeGalleryRoute } from "@/utils/gallery-history";
 import { name as appName } from "@/utils/constants";
 import { useFileStore } from "@/stores/file";
 import { useLayoutStore } from "@/stores/layout";
@@ -611,11 +612,9 @@ const fetchData = async () => {
 function closeGallery() {
   galleryClosed.value = true;
   if (route.path.split("/").filter(Boolean).length > 2) {
-    void router
-      .push({ path: urlUtils.removeLastDir(route.path) })
-      .catch((error) =>
-        $showError(error instanceof Error ? error : String(error))
-      );
+    void closeGalleryRoute(router, urlUtils.removeLastDir(route.path)).catch(
+      (error) => $showError(error instanceof Error ? error : String(error))
+    );
   }
 }
 

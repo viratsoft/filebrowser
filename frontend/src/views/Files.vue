@@ -151,14 +151,17 @@ const fetchData = async () => {
   layoutStore.loading = true;
   error.value = null;
 
+  const requestedRoute = route.fullPath;
   let url = route.path;
   if (url === "") url = "/";
   if (url[0] !== "/") url = "/" + url;
   // Cancel the ongoing request
   fetchDataController.abort();
-  fetchDataController = new AbortController();
+  const controller = new AbortController();
+  fetchDataController = controller;
   try {
-    const res = await api.fetch(url, fetchDataController.signal);
+    const res = await api.fetch(url, controller.signal);
+    if (controller.signal.aborted || route.fullPath !== requestedRoute) return;
     fileStore.updateRequest(res);
     document.title = `${res.name || t("sidebar.myFiles")} - ${t("files.files")} - ${name}`;
     layoutStore.loading = false;
@@ -166,7 +169,11 @@ const fetchData = async () => {
     // Selects the post-reload target item or the previously visited child folder
     applyPreSelection();
   } catch (err) {
-    if (err instanceof StatusError && err.is_canceled) {
+    if (
+      controller.signal.aborted ||
+      route.fullPath !== requestedRoute ||
+      (err instanceof StatusError && err.is_canceled)
+    ) {
       return;
     }
     if (err instanceof Error) {

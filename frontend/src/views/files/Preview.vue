@@ -9,12 +9,18 @@
   >
     <header-bar v-if="isPdf || isEpub || isCsv || showNav">
       <action icon="close" :label="$t('buttons.close')" @action="close()" />
-      <title>{{ name }}</title>
-      <action
-        :disabled="layoutStore.loading"
+      <GalleryTitle
+        v-if="isGalleryMedia"
+        :filename="name"
+        :position="galleryPosition"
+        :total="galleryItems.length"
+      />
+      <title v-else>{{ name }}</title>
+      <GalleryQualityButton
         v-if="isResizeEnabled && fileStore.req?.type === 'image'"
-        :icon="fullSize ? 'photo_size_select_large' : 'hd'"
-        @action="toggleSize"
+        :disabled="layoutStore.loading || navigationPending"
+        :original="fullSize"
+        @toggle="toggleSize"
       />
 
       <template #actions>
@@ -66,7 +72,7 @@
       </template>
     </header-bar>
 
-    <div class="loading delayed" v-if="layoutStore.loading">
+    <div class="loading delayed" v-if="layoutStore.loading && !changingSlide">
       <div class="spinner">
         <div class="bounce1"></div>
         <div class="bounce2"></div>
@@ -78,89 +84,102 @@
         class="preview"
         :class="{ 'image-gallery-viewport': fileStore.req?.type === 'image' }"
       >
-        <div v-if="isEpub" class="epub-reader">
-          <vue-reader
-            :location="location"
-            :url="previewUrl"
-            :get-rendition="getRendition"
-            :epubInitOptions="{
-              requestCredentials: true,
-            }"
-            :epubOptions="{
-              allowPopups: true,
-            }"
-            @update:location="locationChange"
+        <GalleryStage :changing="changingSlide" :backward="backward">
+          <div v-if="isEpub" class="epub-reader">
+            <vue-reader
+              :location="location"
+              :url="previewUrl"
+              :get-rendition="getRendition"
+              :epubInitOptions="{
+                requestCredentials: true,
+              }"
+              :epubOptions="{
+                allowPopups: true,
+              }"
+              @update:location="locationChange"
+            />
+            <div class="size">
+              <button
+                @click="changeSize(Math.max(100, size - 10))"
+                class="reader-button"
+              >
+                <i class="material-icons">remove</i>
+              </button>
+              <button
+                @click="changeSize(Math.min(150, size + 10))"
+                class="reader-button"
+              >
+                <i class="material-icons">add</i>
+              </button>
+              <span>{{ size }}%</span>
+            </div>
+          </div>
+          <CsvViewer
+            v-else-if="isCsv"
+            :content="csvContent"
+            :error="csvError"
           />
-          <div class="size">
-            <button
-              @click="changeSize(Math.max(100, size - 10))"
-              class="reader-button"
-            >
-              <i class="material-icons">remove</i>
-            </button>
-            <button
-              @click="changeSize(Math.min(150, size + 10))"
-              class="reader-button"
-            >
-              <i class="material-icons">add</i>
-            </button>
-            <span>{{ size }}%</span>
+          <ExtendedImage
+            v-else-if="fileStore.req?.type == 'image'"
+            :key="fileStore.req?.path"
+            :src="previewUrl"
+            :alt="name"
+            preserve-swipe
+            :can-go-next="hasNext && !layoutStore.loading && !navigationPending"
+            :can-go-previous="
+              hasPrevious && !layoutStore.loading && !navigationPending
+            "
+            @next="next"
+            @previous="prev"
+            @tap="toggleGalleryNavigation"
+          />
+          <audio
+            v-else-if="fileStore.req?.type == 'audio'"
+            ref="player"
+            :src="previewUrl"
+            controls
+            :autoplay="autoPlay"
+            @play="autoPlay = true"
+          ></audio>
+          <VideoPlayer
+            v-else-if="fileStore.req?.type == 'video'"
+            ref="player"
+            :source="previewUrl"
+            :subtitles="subtitles"
+            :options="videoOptions"
+          >
+          </VideoPlayer>
+          <object v-else-if="isPdf" class="pdf" :data="previewUrl"></object>
+          <div v-else-if="fileStore.req?.type == 'blob'" class="info">
+            <div class="title">
+              <i class="material-icons">feedback</i>
+              {{ $t("files.noPreview") }}
+            </div>
+            <div>
+              <a
+                target="_blank"
+                :href="downloadUrl"
+                class="button button--flat"
+              >
+                <div>
+                  <i class="material-icons">file_download</i
+                  >{{ $t("buttons.download") }}
+                </div>
+              </a>
+              <a
+                target="_blank"
+                :href="previewUrl"
+                class="button button--flat"
+                v-if="!fileStore.req?.isDir"
+              >
+                <div>
+                  <i class="material-icons">open_in_new</i
+                  >{{ $t("buttons.openFile") }}
+                </div>
+              </a>
+            </div>
           </div>
-        </div>
-        <CsvViewer v-else-if="isCsv" :content="csvContent" :error="csvError" />
-        <ExtendedImage
-          v-else-if="fileStore.req?.type == 'image'"
-          :key="fileStore.req?.path"
-          :src="previewUrl"
-          :alt="name"
-          :can-go-next="hasNext && !layoutStore.loading"
-          :can-go-previous="hasPrevious && !layoutStore.loading"
-          @next="next"
-          @previous="prev"
-          @tap="toggleGalleryNavigation"
-        />
-        <audio
-          v-else-if="fileStore.req?.type == 'audio'"
-          ref="player"
-          :src="previewUrl"
-          controls
-          :autoplay="autoPlay"
-          @play="autoPlay = true"
-        ></audio>
-        <VideoPlayer
-          v-else-if="fileStore.req?.type == 'video'"
-          ref="player"
-          :source="previewUrl"
-          :subtitles="subtitles"
-          :options="videoOptions"
-        >
-        </VideoPlayer>
-        <object v-else-if="isPdf" class="pdf" :data="previewUrl"></object>
-        <div v-else-if="fileStore.req?.type == 'blob'" class="info">
-          <div class="title">
-            <i class="material-icons">feedback</i>
-            {{ $t("files.noPreview") }}
-          </div>
-          <div>
-            <a target="_blank" :href="downloadUrl" class="button button--flat">
-              <div>
-                <i class="material-icons">file_download</i
-                >{{ $t("buttons.download") }}
-              </div>
-            </a>
-            <a
-              target="_blank"
-              :href="previewUrl"
-              class="button button--flat"
-              v-if="!fileStore.req?.isDir"
-            >
-              <div>
-                <i class="material-icons">open_in_new</i
-                >{{ $t("buttons.openFile") }}
-              </div>
-            </a>
-          </div>
-        </div>
+        </GalleryStage>
       </div>
     </template>
 
@@ -169,6 +188,7 @@
       @mouseover="hoverNav = true"
       @mouseleave="hoverNav = false"
       :class="{ hidden: !hasPrevious || !showNav }"
+      :disabled="navigationPending || layoutStore.loading"
       :aria-label="$t('buttons.previous')"
       :title="$t('buttons.previous')"
     >
@@ -179,13 +199,12 @@
       @mouseover="hoverNav = true"
       @mouseleave="hoverNav = false"
       :class="{ hidden: !hasNext || !showNav }"
+      :disabled="navigationPending || layoutStore.loading"
       :aria-label="$t('buttons.next')"
       :title="$t('buttons.next')"
     >
       <i class="material-icons">chevron_right</i>
     </button>
-    <link rel="prefetch" :href="previousRaw" />
-    <link rel="prefetch" :href="nextRaw" />
   </div>
 </template>
 
@@ -199,10 +218,14 @@ import { files as api } from "@/api";
 import { createURL } from "@/api/utils";
 import { resizePreview } from "@/utils/constants";
 import url from "@/utils/url";
+import { closeGalleryRoute } from "@/utils/gallery-history";
 import { throttle } from "lodash-es";
 import HeaderBar from "@/components/header/HeaderBar.vue";
 import Action from "@/components/header/Action.vue";
 import ExtendedImage from "@/components/files/ExtendedImage.vue";
+import GalleryStage from "@/components/files/GalleryStage.vue";
+import GalleryTitle from "@/components/files/GalleryTitle.vue";
+import GalleryQualityButton from "@/components/files/GalleryQualityButton.vue";
 import VideoPlayer from "@/components/files/VideoPlayer.vue";
 import CsvViewer from "@/components/files/CsvViewer.vue";
 import { VueReader } from "vue-reader";
@@ -260,7 +283,8 @@ const getRendition = (_rendition: Rendition) => {
   rendition.themes.override("background-color", "transparent", true);
 };
 
-const mediaTypes: ResourceType[] = ["image", "video", "audio", "blob"];
+const galleryTypes: ResourceType[] = ["image", "video", "audio"];
+const previewTypes: ResourceType[] = [...galleryTypes, "blob"];
 
 const previousLink = ref<string>("");
 const nextLink = ref<string>("");
@@ -275,8 +299,6 @@ const showNav = ref<boolean>(true);
 const navTimeout = ref<null | number>(null);
 const hoverNav = ref<boolean>(false);
 const autoPlay = ref<boolean>(false);
-const previousRaw = ref<string>("");
-const nextRaw = ref<string>("");
 const csvContent = ref<ArrayBuffer | string>("");
 const csvError = ref<string>("");
 
@@ -293,9 +315,28 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
+const isGalleryMedia = computed(
+  () => !!fileStore.req && galleryTypes.includes(fileStore.req.type)
+);
+const galleryItems = computed(() =>
+  (listing.value ?? []).filter((item) => galleryTypes.includes(item.type))
+);
+const galleryPosition = computed(
+  () => galleryItems.value.findIndex((item) => item.name === name.value) + 1
+);
+
 const hasPrevious = computed(() => previousLink.value !== "");
 
 const hasNext = computed(() => nextLink.value !== "");
+const navigationPending = ref(false);
+const pendingPath = ref("");
+const backward = ref(false);
+const changingSlide = computed(
+  () =>
+    isGalleryMedia.value &&
+    (navigationPending.value ||
+      (layoutStore.loading && pendingPath.value === route.path))
+);
 
 const downloadUrl = computed(() =>
   fileStore.req ? api.getDownloadURL(fileStore.req, false) : ""
@@ -310,7 +351,7 @@ const previewUrl = computed(() => {
     return "";
   }
 
-  if (fileStore.req.type === "image" && !fullSize.value) {
+  if (fileStore.req.type === "image" && resizePreview && !fullSize.value) {
     return api.getPreviewURL(fileStore.req, "big");
   }
 
@@ -409,17 +450,18 @@ const deleteFile = () => {
   });
 };
 
-let navigationPending = false;
 const navigateTo = async (path: string) => {
-  if (!path || layoutStore.loading || navigationPending) return;
-  navigationPending = true;
+  if (!path || layoutStore.loading || navigationPending.value) return;
+  pendingPath.value = path;
+  backward.value = path === previousLink.value;
+  navigationPending.value = true;
   hoverNav.value = false;
   try {
     await router.replace({ path });
   } catch (error) {
     $showError(error instanceof Error ? error : String(error));
   } finally {
-    navigationPending = false;
+    navigationPending.value = false;
   }
 };
 
@@ -463,8 +505,6 @@ const updatePreview = async () => {
   }
   previousLink.value = "";
   nextLink.value = "";
-  previousRaw.value = "";
-  nextRaw.value = "";
   if (player.value && player.value.paused && !player.value.ended) {
     autoPlay.value = false;
   }
@@ -512,17 +552,18 @@ const updatePreview = async () => {
         continue;
       }
 
+      const mediaTypes = galleryTypes.includes(listing.value[i].type)
+        ? galleryTypes
+        : previewTypes;
       for (let j = i - 1; j >= 0; j--) {
         if (mediaTypes.includes(listing.value[j].type)) {
           previousLink.value = listing.value[j].url;
-          previousRaw.value = prefetchUrl(listing.value[j]);
           break;
         }
       }
       for (let j = i + 1; j < listing.value.length; j++) {
         if (mediaTypes.includes(listing.value[j].type)) {
           nextLink.value = listing.value[j].url;
-          nextRaw.value = prefetchUrl(listing.value[j]);
           break;
         }
       }
@@ -530,16 +571,6 @@ const updatePreview = async () => {
       return;
     }
   }
-};
-
-const prefetchUrl = (item: ResourceItem) => {
-  if (item.type !== "image") {
-    return "";
-  }
-
-  return fullSize.value
-    ? api.getDownloadURL(item, true)
-    : api.getPreviewURL(item, "big");
 };
 
 const toggleSize = () => (fullSize.value = !fullSize.value);
@@ -576,7 +607,13 @@ const toggleGalleryNavigation = () => {
 
 const close = () => {
   const uri = url.removeLastDir(route.path) + "/";
-  router.push({ path: uri });
+  if (isGalleryMedia.value) {
+    void closeGalleryRoute(router, uri).catch((error) =>
+      $showError(error instanceof Error ? error : String(error))
+    );
+  } else {
+    void router.push({ path: uri });
+  }
 };
 
 const download = () => window.open(downloadUrl.value);

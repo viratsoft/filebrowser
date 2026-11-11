@@ -12,30 +12,23 @@
         :label="t('buttons.close')"
         @action="emit('close')"
       />
-      <title>{{ file.name }}</title>
-      <button
+      <gallery-title
+        :filename="file.name"
+        :position="singleFileShare ? 1 : currentIndex + 1"
+        :total="singleFileShare ? 1 : siblings.length"
+      />
+      <gallery-quality-button
         v-if="file.type === 'image' && file.allowImagePreview"
-        type="button"
-        class="action"
-        :disabled="layout.loading"
-        :aria-pressed="effectiveOriginal"
-        :title="qualityLabel"
-        :aria-label="qualityLabel"
-        @click="toggleQuality"
-      >
-        <i class="material-icons" aria-hidden="true">{{
-          effectiveOriginal ? "photo_size_select_large" : "hd"
-        }}</i>
-      </button>
+        :original="effectiveOriginal"
+        :disabled="layout.loading || navigating"
+        @toggle="toggleQuality"
+      />
     </header-bar>
     <div
       class="preview"
       :class="{ 'image-gallery-viewport': file.type === 'image' }"
     >
-      <div
-        class="public-media-stage"
-        :class="{ 'is-changing': changingSlide, 'going-back': backward }"
-      >
+      <gallery-stage :changing="changingSlide" :backward="backward">
         <extended-image
           v-if="file.type === 'image' && source"
           :key="file.path"
@@ -64,13 +57,7 @@
           <span v-if="failed">{{ t("files.noPreview") }}</span>
           <gallery-spinner v-else :label="t('files.loading')" />
         </div>
-      </div>
-      <div
-        v-if="changingSlide"
-        class="public-media-status public-slide-loading"
-      >
-        <gallery-spinner :label="t('files.loading')" />
-      </div>
+      </gallery-stage>
     </div>
     <button
       :class="{ hidden: !previous || !showControls }"
@@ -103,6 +90,9 @@ import Action from "@/components/header/Action.vue";
 import ExtendedImage from "./ExtendedImage.vue";
 import VideoPlayer from "./VideoPlayer.vue";
 import GallerySpinner from "./GallerySpinner.vue";
+import GalleryStage from "./GalleryStage.vue";
+import GalleryTitle from "./GalleryTitle.vue";
+import GalleryQualityButton from "./GalleryQualityButton.vue";
 
 const props = defineProps<{
   file: Resource;
@@ -136,19 +126,15 @@ let disposed = false;
 const effectiveOriginal = computed(
   () => props.original || !props.file.allowImagePreview
 );
-const qualityLabel = computed(() =>
-  t(
-    effectiveOriginal.value
-      ? "buttons.previewQuality"
-      : "buttons.originalQuality"
-  )
-);
 const mediaURL = computed(() =>
   props.file.uploadOnly
     ? ""
     : props.file.type !== "image" || effectiveOriginal.value
       ? api.getDownloadURL(props.file, true)
       : api.getImagePreviewURL(props.file)
+);
+const singleFileShare = computed(
+  () => props.file.url.split("/").filter(Boolean).length <= 2
 );
 const currentIndex = computed(() =>
   siblings.value.findIndex((item) => item.url === props.file.url)
@@ -189,7 +175,7 @@ async function loadSiblings() {
     parentURL = "";
     return;
   }
-  if (fileURL.split("/").filter(Boolean).length <= 2) {
+  if (singleFileShare.value) {
     siblings.value = [];
     parentURL = "";
     return;
@@ -269,7 +255,8 @@ async function go(item?: ResourceItem) {
   backward.value = item.url === previous.value?.url;
   navigating.value = true;
   try {
-    await router.push({ path: item.url });
+    // The folder-to-gallery navigation owns the history entry for every slide.
+    await router.replace({ path: item.url });
   } catch (error) {
     pendingPath.value = "";
     showError?.(error instanceof Error ? error : String(error));
@@ -296,8 +283,23 @@ function key(event: KeyboardEvent) {
 }
 
 watch(
-  () => [props.file.hash, props.file.url, props.file.uploadOnly],
-  () => {
+  () => [
+    props.file.hash,
+    props.file.url,
+    props.file.uploadOnly,
+    props.file.token,
+    props.password,
+  ],
+  (current, previous) => {
+    if (
+      previous &&
+      (current[0] !== previous[0] ||
+        current[3] !== previous[3] ||
+        current[4] !== previous[4])
+    ) {
+      parentURL = "";
+      siblings.value = [];
+    }
     void loadSiblings();
   },
   { immediate: true }
@@ -333,37 +335,6 @@ onBeforeUnmount(() => {
 <style scoped>
 #previewer {
   background-color: #000;
-}
-.public-media-stage {
-  width: 100%;
-  height: 100%;
-  transition:
-    opacity 180ms ease-out,
-    transform 180ms cubic-bezier(0.2, 0.72, 0.22, 1);
-}
-.public-media-stage.is-changing {
-  opacity: 0;
-  transform: translate3d(-22px, 0, 0);
-  pointer-events: none;
-}
-.public-media-stage.is-changing.going-back {
-  transform: translate3d(22px, 0, 0);
-}
-.public-slide-loading {
-  animation: public-slide-loader 0s 80ms both;
-}
-@keyframes public-slide-loader {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .public-media-stage {
-    transition: none;
-  }
 }
 .public-media-status {
   position: absolute;
