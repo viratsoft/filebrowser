@@ -1,4 +1,5 @@
 import { fetchURL, removePrefix, createURL } from "./utils";
+import { imagePreviewURL } from "./image-preview-url";
 import { baseURL } from "@/utils/constants";
 import * as tus from "tus-js-client";
 import { origin, tusSettings } from "@/utils/constants";
@@ -125,18 +126,13 @@ export function getThumbnailURL(
   modified: string,
   token = ""
 ) {
-  const relativePath = path.startsWith("/") ? path : `/${path}`;
-  return createURL(`api/public/thumb/${hash}${relativePath}`, {
-    v: modified,
-    ...(token && { token }),
-  });
+  return imagePreviewURL(path, modified, "thumb", { hash, token });
 }
 
 export function getImagePreviewURL(file: Resource) {
-  const path = file.path.startsWith("/") ? file.path : `/${file.path}`;
-  return createURL(`api/public/preview/${file.hash}${path}`, {
-    v: file.modified,
-    ...(file.token && { token: file.token }),
+  return imagePreviewURL(file.path, file.modified, "big", {
+    hash: file.hash ?? "",
+    token: file.token,
   });
 }
 

@@ -342,6 +342,7 @@
 </template>
 
 <script setup lang="ts">
+import { listingViewModes } from "@/utils/listing-view-modes";
 import { useAuthStore } from "@/stores/auth";
 import { useClipboardStore } from "@/stores/clipboard";
 import { useFileStore } from "@/stores/file";
@@ -466,16 +467,13 @@ const modifiedIcon = computed(() => {
   return "arrow_upward";
 });
 
-const viewIcon = computed(() => {
-  const icons = {
-    list: "view_module",
-    mosaic: "grid_view",
-    "mosaic gallery": "view_list",
-  };
-  return authStore.user === null
-    ? icons["list"]
-    : icons[authStore.user.viewMode];
-});
+const viewIcon = computed(
+  () =>
+    (
+      listingViewModes[authStore.user?.viewMode ?? "list"] ??
+      listingViewModes.list
+    ).icon
+);
 
 const headerButtons = computed(() => {
   return {
@@ -1021,16 +1019,10 @@ const download = () => {
 const switchView = async () => {
   layoutStore.closeHovers();
 
-  const modes = {
-    list: "mosaic",
-    mosaic: "mosaic gallery",
-    "mosaic gallery": "list",
-  };
-
   const data = {
     id: authStore.user?.id,
-    viewMode: (modes[authStore.user?.viewMode ?? "list"] ||
-      "list") as ViewModeType,
+    viewMode:
+      listingViewModes[authStore.user?.viewMode ?? "list"]?.next ?? "list",
   };
 
   users.update(data, ["viewMode"]).catch($showError);

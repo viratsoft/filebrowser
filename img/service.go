@@ -119,16 +119,19 @@ func (s *Service) FormatFromExtension(ext string) (Format, error) {
 }
 
 type resizeConfig struct {
-	format     Format
-	resizeMode ResizeMode
-	quality    Quality
+	format                *Format
+	resizeMode            ResizeMode
+	quality               Quality
+	decodeBudget          semaphore.Semaphore
+	decodeBudgetCapacity  int
+	skipEmbeddedThumbnail bool
 }
 
 type Option func(*resizeConfig)
 
 func WithFormat(format Format) Option {
 	return func(config *resizeConfig) {
-		config.format = format
+		config.format = &format
 	}
 }
 
@@ -144,19 +147,27 @@ func WithQuality(quality Quality) Option {
 	}
 }
 
+// WithoutEmbeddedThumbnail derives thumbnails from the main image pixels.
+func WithoutEmbeddedThumbnail() Option {
+	return func(config *resizeConfig) { config.skipEmbeddedThumbnail = true }
+}
+
+// WithDecodeBudget bounds concurrent full-image decodes with a shared pixel budget.
+// The dimensions come from the same header replayed to the full decoder.
+func WithDecodeBudget(budget semaphore.Semaphore, capacity int) Option {
+	return func(config *resizeConfig) {
+		config.decodeBudget = budget
+		config.decodeBudgetCapacity = capacity
+	}
+}
+
 func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, out io.Writer, options ...Option) error {
 	if err := s.sem.Acquire(ctx, 1); err != nil {
 		return err
 	}
 	defer s.sem.Release(1)
 
-	format, wrappedReader, err := s.detectFormat(in)
-	if err != nil {
-		return err
-	}
-
 	config := resizeConfig{
-		format:     format,
 		resizeMode: ResizeModeFit,
 		quality:    QualityMedium,
 	}
@@ -164,7 +175,15 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 		option(&config)
 	}
 
-	if config.quality == QualityLow && format == FormatJpeg {
+	format, wrappedReader, pixels, err := s.detectFormat(in, config.decodeBudget != nil)
+	if err != nil {
+		return err
+	}
+	if config.format == nil {
+		config.format = &format
+	}
+
+	if config.quality == QualityLow && format == FormatJpeg && !config.skipEmbeddedThumbnail {
 		thm, newWrappedReader, errThm := getEmbeddedThumbnail(wrappedReader)
 		wrappedReader = newWrappedReader
 		if errThm == nil {
@@ -173,6 +192,14 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 				return nil
 			}
 		}
+	}
+	if config.decodeBudget != nil {
+		// Larger images take the whole budget and decode one at a time.
+		weight := min(pixels*2, config.decodeBudgetCapacity)
+		if err := config.decodeBudget.Acquire(ctx, weight); err != nil {
+			return err
+		}
+		defer config.decodeBudget.Release(weight)
 	}
 
 	img, err := imaging.Decode(wrappedReader, imaging.AutoOrientation(true))
@@ -192,27 +219,30 @@ func (s *Service) Resize(ctx context.Context, in io.Reader, width, height int, o
 	return imaging.Encode(out, img, config.format.toImaging())
 }
 
-func (s *Service) detectFormat(in io.Reader) (Format, io.Reader, error) {
+func (s *Service) detectFormat(in io.Reader, limitHeader bool) (Format, io.Reader, int, error) {
 	buf := &bytes.Buffer{}
 	r := io.TeeReader(in, buf)
+	if limitHeader {
+		r = io.LimitReader(r, 1<<20)
+	}
 
 	imgConfig, imgFormat, err := image.DecodeConfig(r)
 	if err != nil {
-		return 0, nil, fmt.Errorf("%s: %w", err.Error(), ErrUnsupportedFormat)
+		return 0, nil, 0, fmt.Errorf("%s: %w", err.Error(), ErrUnsupportedFormat)
 	}
 
 	// Check if image dimensions exceed maximum allowed size
-	if imgConfig.Width > MaxImageWidth || imgConfig.Height > MaxImageHeight {
-		return 0, nil, fmt.Errorf("image dimensions %dx%d exceed maximum %dx%d: %w",
+	if imgConfig.Width <= 0 || imgConfig.Height <= 0 || imgConfig.Width > MaxImageWidth || imgConfig.Height > MaxImageHeight {
+		return 0, nil, 0, fmt.Errorf("image dimensions %dx%d outside allowed maximum %dx%d: %w",
 			imgConfig.Width, imgConfig.Height, MaxImageWidth, MaxImageHeight, ErrImageTooLarge)
 	}
 
 	format, err := ParseFormat(imgFormat)
 	if err != nil {
-		return 0, nil, ErrUnsupportedFormat
+		return 0, nil, 0, ErrUnsupportedFormat
 	}
 
-	return format, io.MultiReader(buf, in), nil
+	return format, io.MultiReader(buf, in), imgConfig.Width * imgConfig.Height, nil
 }
 
 func getEmbeddedThumbnail(in io.Reader) ([]byte, io.Reader, error) {

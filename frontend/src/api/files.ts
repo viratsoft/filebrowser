@@ -3,6 +3,7 @@ import { useLayoutStore } from "@/stores/layout";
 import { baseURL } from "@/utils/constants";
 import { upload as postTus, useTus } from "./tus";
 import { createURL, fetchURL, removePrefix, StatusError } from "./utils";
+import { imagePreviewURL } from "./image-preview-url";
 import { isEncodableResponse, makeRawResource } from "@/utils/encodings";
 
 export async function fetch(url: string, signal?: AbortSignal) {
@@ -233,13 +234,11 @@ export function getDownloadURL(file: ResourceItem, inline: any) {
   return createURL("api/raw" + file.path, params);
 }
 
-export function getPreviewURL(file: ResourceItem, size: string) {
-  const params = {
-    inline: "true",
-    key: Date.parse(file.modified),
-  };
-
-  return createURL("api/preview/" + size + file.path, params);
+export function getPreviewURL(
+  file: Pick<ResourceItem, "path" | "modified">,
+  size: "thumb" | "big"
+) {
+  return imagePreviewURL(file.path, file.modified, size);
 }
 
 export function getSubtitlesURL(file: ResourceItem) {

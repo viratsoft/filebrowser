@@ -112,6 +112,17 @@ func handleImagePreview(
 	return 0, nil
 }
 
+func previewResizeSpec(size PreviewSize) (int, []img.Option) {
+	switch size {
+	case PreviewSizeBig:
+		return 1080, []img.Option{img.WithMode(img.ResizeModeFit), img.WithQuality(img.QualityMedium)}
+	case PreviewSizeThumb:
+		return 256, []img.Option{img.WithMode(img.ResizeModeFill), img.WithQuality(img.QualityLow), img.WithFormat(img.FormatJpeg)}
+	default:
+		return 0, nil
+	}
+}
+
 func createPreview(imgSvc ImgService, fileCache FileCache,
 	file *files.FileInfo, previewSize PreviewSize) ([]byte, error) {
 	fd, err := file.Fs.Open(file.Path)
@@ -120,27 +131,13 @@ func createPreview(imgSvc ImgService, fileCache FileCache,
 	}
 	defer fd.Close()
 
-	var (
-		width   int
-		height  int
-		options []img.Option
-	)
-
-	switch previewSize {
-	case PreviewSizeBig:
-		width = 1080
-		height = 1080
-		options = append(options, img.WithMode(img.ResizeModeFit), img.WithQuality(img.QualityMedium))
-	case PreviewSizeThumb:
-		width = 256
-		height = 256
-		options = append(options, img.WithMode(img.ResizeModeFill), img.WithQuality(img.QualityLow), img.WithFormat(img.FormatJpeg))
-	default:
+	size, options := previewResizeSpec(previewSize)
+	if size == 0 {
 		return nil, img.ErrUnsupportedFormat
 	}
 
 	buf := &bytes.Buffer{}
-	if err := imgSvc.Resize(context.Background(), fd, width, height, buf, options...); err != nil {
+	if err := imgSvc.Resize(context.Background(), fd, size, size, buf, options...); err != nil {
 		return nil, err
 	}
 

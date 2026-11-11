@@ -6,19 +6,19 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"image"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/filebrowser/filebrowser/v2/files"
 	"github.com/filebrowser/filebrowser/v2/img"
+	"github.com/marusama/semaphore/v2"
 )
 
 // Bound the extra public read path independently of authenticated downloads.
 const (
 	maxPublicThumbnailSourceBytes int64 = 64 << 20
-	maxPublicThumbnailPixels      int64 = 25_000_000
+	publicThumbnailPixelBudget          = img.MaxImageWidth * img.MaxImageHeight
 )
 
 type publicThumbnailSourceReader struct {
@@ -26,7 +26,9 @@ type publicThumbnailSourceReader struct {
 	reader io.Reader
 }
 
-var publicImagePreviewSlots = make(chan struct{}, 2)
+var publicImagePreviewSlots = make(chan struct{}, 4)
+var publicImageResizeSlots = make(chan struct{}, 2)
+var publicImageDecodeBudget = semaphore.New(publicThumbnailPixelBudget)
 
 func (r publicThumbnailSourceReader) Read(p []byte) (int, error) {
 	if err := r.ctx.Err(); err != nil {
@@ -46,13 +48,13 @@ func publicPreviewHandler(imgSvc ImgService, cache FileCache) handleFunc {
 }
 
 func publicImagePreviewHandler(imgSvc ImgService, cache FileCache, thumbnail bool) handleFunc {
-	// Bound source hashing/open files as well as the image service's decoder
-	// concurrency. Extra public requests wait without opening a source file.
-	slots := publicImagePreviewSlots
-	size, mode := 256, img.ResizeModeFill
-	if !thumbnail {
-		size, mode = 1080, img.ResizeModeFit
+	previewSize := PreviewSizeBig
+	if thumbnail {
+		previewSize = PreviewSizeThumb
 	}
+	size, resizeOptions := previewResizeSpec(previewSize)
+	resizeOptions = append(resizeOptions, img.WithFormat(img.FormatJpeg),
+		img.WithoutEmbeddedThumbnail(), img.WithDecodeBudget(publicImageDecodeBudget, publicThumbnailPixelBudget))
 	authorized := withHashFileOptions(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		if d.rawShare.UploadOnly || (thumbnail && (d.user.HideShareThumbnails || !d.server.EnableThumbnails)) || (!thumbnail && !d.server.ResizePreview) {
 			return http.StatusForbidden, nil
@@ -67,9 +69,10 @@ func publicImagePreviewHandler(imgSvc ImgService, cache FileCache, thumbnail boo
 		if file.Size > maxPublicThumbnailSourceBytes {
 			return http.StatusRequestEntityTooLarge, nil
 		}
+		// Cache hits can check their source while other requests decode images.
 		select {
-		case slots <- struct{}{}:
-			defer func() { <-slots }()
+		case publicImagePreviewSlots <- struct{}{}:
+			defer func() { <-publicImagePreviewSlots }()
 		case <-r.Context().Done():
 			return errToStatus(r.Context().Err()), r.Context().Err()
 		}
@@ -90,7 +93,7 @@ func publicImagePreviewHandler(imgSvc ImgService, cache FileCache, thumbnail boo
 		if n > maxPublicThumbnailSourceBytes {
 			return http.StatusRequestEntityTooLarge, nil
 		}
-		key := fmt.Sprintf("public-image-v3-%d-%d-%x-%x", size, mode, file.RealPath(), digest.Sum(nil))
+		key := fmt.Sprintf("public-image-v4-%d-%x-%x", previewSize, file.RealPath(), digest.Sum(nil))
 		thumbnail, cached, err := cache.Load(r.Context(), key)
 		if err != nil {
 			// Caching is optional. A read outage can still serve a freshly
@@ -98,20 +101,11 @@ func publicImagePreviewHandler(imgSvc ImgService, cache FileCache, thumbnail boo
 			cached = false
 		}
 		if !cached {
-			if _, err := reader.Seek(0, io.SeekStart); err != nil {
-				return errToStatus(err), err
-			}
-			// A small compressed upload can still expand into a very large bitmap.
-			// Bound public decode memory before invoking the full image decoder.
-			config, _, err := image.DecodeConfig(publicThumbnailSourceReader{ctx: r.Context(), reader: io.LimitReader(reader, 1<<20)})
-			if err != nil {
-				if r.Context().Err() != nil {
-					return errToStatus(r.Context().Err()), r.Context().Err()
-				}
-				return http.StatusUnsupportedMediaType, nil
-			}
-			if config.Width <= 0 || config.Height <= 0 || int64(config.Width) > maxPublicThumbnailPixels/int64(config.Height) {
-				return http.StatusRequestEntityTooLarge, nil
+			select {
+			case publicImageResizeSlots <- struct{}{}:
+				defer func() { <-publicImageResizeSlots }()
+			case <-r.Context().Done():
+				return errToStatus(r.Context().Err()), r.Context().Err()
 			}
 			if _, err := reader.Seek(0, io.SeekStart); err != nil {
 				return errToStatus(err), err
@@ -124,11 +118,12 @@ func publicImagePreviewHandler(imgSvc ImgService, cache FileCache, thumbnail boo
 			limited := &io.LimitedReader{R: publicThumbnailSourceReader{ctx: r.Context(), reader: reader}, N: maxPublicThumbnailSourceBytes + 1}
 			source := io.TeeReader(limited, decodedDigest)
 			var output bytes.Buffer
-			// Medium quality avoids trusting an embedded EXIF thumbnail. Always
-			// re-encode as a small JPEG; never fall back to serving the raw file.
-			err = imgSvc.Resize(r.Context(), source, size, size, &output,
-				img.WithMode(mode), img.WithQuality(img.QualityMedium), img.WithFormat(img.FormatJpeg))
+			// Only serve a JPEG derived from the authorized main image pixels.
+			err = imgSvc.Resize(r.Context(), source, size, size, &output, resizeOptions...)
 			if err != nil {
+				if r.Context().Err() != nil {
+					return errToStatus(r.Context().Err()), r.Context().Err()
+				}
 				if errors.Is(err, img.ErrUnsupportedFormat) {
 					return http.StatusUnsupportedMediaType, nil
 				}
@@ -143,7 +138,7 @@ func publicImagePreviewHandler(imgSvc ImgService, cache FileCache, thumbnail boo
 			if limited.N == 0 {
 				return http.StatusRequestEntityTooLarge, nil
 			}
-			key = fmt.Sprintf("public-image-v3-%d-%d-%x-%x", size, mode, file.RealPath(), decodedDigest.Sum(nil))
+			key = fmt.Sprintf("public-image-v4-%d-%x-%x", previewSize, file.RealPath(), decodedDigest.Sum(nil))
 			thumbnail = output.Bytes()
 			// A cache outage must not turn an otherwise valid thumbnail into a
 			// broken image. Store synchronously; do not spawn unbounded goroutines.

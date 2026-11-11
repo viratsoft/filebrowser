@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"image"
 	"image/jpeg"
-	"image/png"
+
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,10 +24,10 @@ func TestPublicViewerPreviewAndOriginalRespectSharePolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	var original bytes.Buffer
-	if err := png.Encode(&original, image.NewRGBA(image.Rect(0, 0, 400, 200))); err != nil {
+	if err := jpeg.Encode(&original, image.NewGray(image.Rect(0, 0, 9000, 6000)), nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "shared", "photo.png"), original.Bytes(), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "shared", "photo.JPG"), original.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	key := []byte("public-preview-key")
@@ -47,7 +47,7 @@ func TestPublicViewerPreviewAndOriginalRespectSharePolicy(t *testing.T) {
 	thumb := handle(publicThumbnailHandler(img.New(1), cache), "/api/public/thumb/", st, server)
 	raw := handle(publicDlHandler, "/api/public/dl/", st, server)
 	request := func(handler http.Handler, endpoint, token string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "/api/public/"+endpoint+"/viewer/photo.png?inline=true&token="+token, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/public/"+endpoint+"/viewer/photo.JPG?inline=true&token="+token, nil)
 		req.Header.Set("X-Auth", signToken(t, perm, key))
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -61,7 +61,7 @@ func TestPublicViewerPreviewAndOriginalRespectSharePolicy(t *testing.T) {
 	if result.Code != http.StatusOK || err != nil {
 		t.Fatalf("viewer preview: %d %v", result.Code, err)
 	}
-	if decoded.Bounds().Dx() != 400 || decoded.Bounds().Dy() != 200 {
+	if decoded.Bounds().Dx() != 1080 || decoded.Bounds().Dy() != 720 {
 		t.Fatalf("preview was cropped like a list thumbnail: %v", decoded.Bounds())
 	}
 	if rec := request(thumb, "thumb", link.Token); rec.Code != http.StatusOK {

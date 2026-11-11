@@ -33,9 +33,6 @@ async function render(props: {
   });
   app.use(createPinia());
   app.provide("$showError", vi.fn());
-  app.directive("lazy", {
-    getSSRProps: () => ({ "data-private-thumbnail": "true" }),
-  });
   return renderToString(app);
 }
 
@@ -77,7 +74,9 @@ describe("readonly shared file thumbnails", () => {
       publicThumbnailUrl: "/api/public/thumb/hash/photo.png",
     });
     expect(api.getPreviewURL).toHaveBeenCalled();
-    expect(html).toContain("data-private-thumbnail");
+    expect(html).toContain('src="/api/preview/thumb/photo.png"');
+    expect(html).toContain('loading="lazy"');
+    expect(html).toContain('referrerpolicy="no-referrer"');
     expect(html).not.toContain('src="/api/public/thumb/');
   });
 });

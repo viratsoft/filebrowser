@@ -28,20 +28,20 @@
       :style="imageStyle"
       :aria-hidden="!ready"
       draggable="false"
+      referrerpolicy="no-referrer"
       @load="onLoad"
       @error="onError"
     />
     <div v-if="!ready" class="gallery-status" role="status">
       <span v-if="failed">{{ t("files.noPreview") }}</span>
-      <i v-else class="material-icons spin" :aria-label="t('files.loading')"
-        >autorenew</i
-      >
+      <gallery-spinner v-else :label="t('files.loading')" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import UTIF from "utif";
+import GallerySpinner from "./GallerySpinner.vue";
 import {
   computed,
   nextTick,
@@ -61,6 +61,7 @@ import type {
 const props = withDefaults(
   defineProps<{
     src: string;
+    preserveSwipe?: boolean;
     alt?: string;
     classList?: string[];
     zoomStep?: number;
@@ -76,7 +77,9 @@ const props = withDefaults(
     canGoPrevious: false,
   }
 );
-const emit = defineEmits<{ (event: "next" | "previous" | "tap"): void }>();
+const emit = defineEmits<{
+  (event: "next" | "previous" | "tap"): void;
+}>();
 const { t } = useI18n();
 const model = new ImageGalleryController();
 const transform = shallowRef(model.transform);
@@ -95,12 +98,17 @@ let disposed = false;
 let decodeAttempted = false;
 let lastLegacyTouch = -Infinity;
 let tapTimer: ReturnType<typeof setTimeout> | null = null;
+let swipeTimer: ReturnType<typeof setTimeout> | null = null;
 // Wall-clock corrections must not stretch the double-tap window or its timer.
 const now = () => window.performance.now();
 
 function clearTapTimer() {
   if (tapTimer !== null) clearTimeout(tapTimer);
   tapTimer = null;
+}
+function clearSwipeTimer() {
+  if (swipeTimer !== null) clearTimeout(swipeTimer);
+  swipeTimer = null;
 }
 function scheduleSingleTap() {
   clearTapTimer();
@@ -141,6 +149,30 @@ const navigate = (action: GalleryNavigation) => {
   if (action === "previous" && props.canGoPrevious) emit("previous");
 };
 
+function finishSwipe(action: GalleryNavigation) {
+  clearSwipeTimer();
+  const committing =
+    props.preserveSwipe &&
+    ((action === "next" && props.canGoNext) ||
+      (action === "previous" && props.canGoPrevious));
+  if (committing) {
+    // Keep the last drag position while the outgoing slide animates, rather
+    // than jumping back to center before the next file metadata arrives.
+    interacting.value = false;
+    animate.value = false;
+    swipeTimer = setTimeout(() => {
+      swipeTimer = null;
+      animate.value = true;
+      publish();
+    }, 230);
+  } else {
+    animate.value = !model.isInteracting;
+    publish();
+  }
+  navigate(action);
+  scheduleSingleTap();
+}
+
 function pointerDown(event: PointerEvent) {
   if (
     !pointerSupported ||
@@ -158,6 +190,7 @@ function pointerDown(event: PointerEvent) {
     return;
   animate.value = false;
   clearTapTimer();
+  clearSwipeTimer();
   prevent(event);
   try {
     container.value?.setPointerCapture(event.pointerId);
@@ -176,16 +209,14 @@ function pointerUp(event: PointerEvent) {
   if (!pointerSupported || !model.hasPointer(event.pointerId)) return;
   prevent(event);
   const action = model.pointerUp(event.pointerId, local(event), now());
-  animate.value = !model.isInteracting;
-  publish();
-  navigate(action);
-  scheduleSingleTap();
+  finishSwipe(action);
 }
 function pointerCancel(event: PointerEvent) {
   if (pointerSupported && model.hasPointer(event.pointerId)) cancelGesture();
 }
 function cancelGesture() {
   clearTapTimer();
+  clearSwipeTimer();
   model.cancelGesture();
   animate.value = true;
   publish();
@@ -197,6 +228,7 @@ function touchStart(event: TouchEvent) {
   if (pointerSupported) return;
   lastLegacyTouch = now();
   clearTapTimer();
+  clearSwipeTimer();
   prevent(event);
   animate.value = false;
   for (const touch of Array.from(event.changedTouches))
@@ -218,10 +250,7 @@ function touchEnd(event: TouchEvent) {
   let action: GalleryNavigation = null;
   for (const touch of Array.from(event.changedTouches))
     action = model.pointerUp(touch.identifier, local(touch), now()) || action;
-  animate.value = !model.isInteracting;
-  publish();
-  navigate(action);
-  scheduleSingleTap();
+  finishSwipe(action);
 }
 function mouseDown(event: MouseEvent) {
   if (pointerSupported || event.button !== 0 || now() - lastLegacyTouch < 800)
@@ -268,6 +297,7 @@ function wheel(event: WheelEvent) {
 }
 function resize() {
   if (!container.value || disposed) return;
+  clearSwipeTimer();
   animate.value = false;
   model.setViewport(container.value.clientWidth, container.value.clientHeight);
   publish();
@@ -313,6 +343,7 @@ function visibilityChanged() {
 
 async function loadImage() {
   clearTapTimer();
+  clearSwipeTimer();
   const current = ++generation.value;
   xhr?.abort();
   xhr = null;
@@ -398,6 +429,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   disposed = true;
   clearTapTimer();
+  clearSwipeTimer();
   generation.value++;
   xhr?.abort();
   observer?.disconnect();
@@ -432,6 +464,7 @@ onBeforeUnmount(() => {
   transform-origin: 0 0;
   user-select: none;
   -webkit-user-drag: none;
+  transition: opacity 120ms ease-out;
 }
 .gallery-zoomed {
   cursor: grab;
@@ -440,7 +473,9 @@ onBeforeUnmount(() => {
   cursor: grabbing;
 }
 .gallery-animate .image-ex-img {
-  transition: transform 160ms ease-out;
+  transition:
+    transform 160ms ease-out,
+    opacity 120ms ease-out;
 }
 .gallery-status {
   position: absolute;

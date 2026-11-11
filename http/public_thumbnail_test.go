@@ -157,8 +157,8 @@ func TestPublicThumbnailSourceReadIsBoundedAndCancelable(t *testing.T) {
 	copy(header, "\x89PNG\r\n\x1a\n")
 	binary.BigEndian.PutUint32(header[8:12], 13)
 	copy(header[12:16], "IHDR")
-	binary.BigEndian.PutUint32(header[16:20], 6000)
-	binary.BigEndian.PutUint32(header[20:24], 6000)
+	binary.BigEndian.PutUint32(header[16:20], 11000)
+	binary.BigEndian.PutUint32(header[20:24], 11000)
 	header[24], header[25] = 8, 2
 	binary.BigEndian.PutUint32(header[29:33], crc32.ChecksumIEEE(header[12:29]))
 	if err := os.WriteFile(filepath.Join(root, "huge-pixels.png"), header, 0o600); err != nil {

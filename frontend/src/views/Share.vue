@@ -53,16 +53,19 @@
         :label="t('buttons.upload')"
         @action="openUpload"
       />
-      <select-all-button
-        v-if="req?.isDir && !isUploadOnly && !error && !layoutStore.loading"
-        public-share
-      />
-      <action
-        v-if="!isUploadOnly"
-        icon="check_circle"
-        :label="t('buttons.selectMultiple')"
-        @action="toggleMultipleSelection"
-      />
+      <select-all-button v-if="canSwitchView" public-share />
+      <template v-if="canSwitchView" #actions>
+        <action
+          :icon="listingViewModes[viewMode].icon"
+          :label="t('buttons.switchView')"
+          @action="switchView"
+        />
+        <action
+          icon="check_circle"
+          :label="t('buttons.selectMultiple')"
+          @action="toggleMultipleSelection"
+        />
+      </template>
     </header-bar>
 
     <breadcrumbs :base="'/share/' + hash" />
@@ -314,32 +317,39 @@
               </span>
             </span>
           </div>
-          <div v-if="!isUploadOnly" id="listing" class="list file-icons">
-            <item
-              v-for="item in req.items.slice(0, showLimit)"
-              :key="base64(item.name)"
-              v-bind:index="item.index"
-              v-bind:name="item.name"
-              v-bind:isDir="item.isDir"
-              v-bind:url="item.url"
-              v-bind:modified="item.modified"
-              v-bind:type="item.type"
-              v-bind:size="item.size"
-              :public-thumbnail-url="
-                req.showThumbnails && !isUploadOnly && item.type === 'image'
-                  ? api.getThumbnailURL(hash, item.path, item.modified, token)
-                  : undefined
-              "
-              readOnly
-            >
-            </item>
-            <div
-              v-if="req.items.length > showLimit"
-              class="item"
-              @click="showLimit += 100"
-            >
-              <div>
-                <p class="name">+ {{ req.items.length - showLimit }}</p>
+          <div
+            v-if="!isUploadOnly"
+            id="listing"
+            class="file-icons"
+            :class="viewMode"
+          >
+            <div>
+              <item
+                v-for="item in req.items.slice(0, showLimit)"
+                :key="base64(item.name)"
+                v-bind:index="item.index"
+                v-bind:name="item.name"
+                v-bind:isDir="item.isDir"
+                v-bind:url="item.url"
+                v-bind:modified="item.modified"
+                v-bind:type="item.type"
+                v-bind:size="item.size"
+                :public-thumbnail-url="
+                  req.showThumbnails && !isUploadOnly && item.type === 'image'
+                    ? api.getThumbnailURL(hash, item.path, item.modified, token)
+                    : undefined
+                "
+                readOnly
+              >
+              </item>
+              <div
+                v-if="req.items.length > showLimit"
+                class="item"
+                @click="showLimit += 100"
+              >
+                <div>
+                  <p class="name">+ {{ req.items.length - showLimit }}</p>
+                </div>
               </div>
             </div>
 
@@ -405,6 +415,7 @@
 <script setup lang="ts">
 import { pub as api } from "@/api";
 import { filesize } from "@/utils";
+import { listingViewModes } from "@/utils/listing-view-modes";
 import dayjs from "dayjs";
 import { Base64 } from "js-base64";
 import { createURL } from "@/api/utils";
@@ -437,6 +448,7 @@ const audio = ref<HTMLAudioElement>();
 const tag = ref<boolean>(false);
 const uploadInput = ref<HTMLInputElement>();
 const originalImage = ref(false);
+const viewMode = ref<ViewModeType>("list");
 const galleryClosed = ref(false);
 const loadedShare = ref(false);
 let fetchController: AbortController | null = null;
@@ -461,6 +473,19 @@ watch(route, () => {
 
 const req = computed(() => fileStore.req);
 const isUploadOnly = computed(() => Boolean(req.value?.uploadOnly));
+const canSwitchView = computed(
+  () =>
+    loadedShare.value &&
+    req.value?.isDir &&
+    !isUploadOnly.value &&
+    !error.value &&
+    !layoutStore.loading
+);
+
+function switchView() {
+  layoutStore.closeHovers();
+  viewMode.value = listingViewModes[viewMode.value].next;
+}
 
 // Define computes
 
@@ -604,6 +629,7 @@ const keyEvent = (event: KeyboardEvent) => {
 };
 
 const toggleMultipleSelection = () => {
+  layoutStore.closeHovers();
   fileStore.toggleMultiple();
 };
 
@@ -727,7 +753,11 @@ onBeforeUnmount(() => {
 }
 
 #shareList {
-  overflow-y: scroll;
+  overflow-y: auto;
+}
+
+#shareList #listing.mosaic {
+  margin: 0;
 }
 
 .share-list-header {
@@ -762,6 +792,17 @@ onBeforeUnmount(() => {
 
 .share-list-stat .material-icons {
   font-size: 1.05em;
+}
+
+@media (max-width: 600px) {
+  #shareList #listing.mosaic :deep(.item) {
+    width: calc(50% - 1em);
+  }
+
+  #shareList #listing.mosaic.gallery :deep(.item > div:first-child) {
+    height: auto;
+    aspect-ratio: 1;
+  }
 }
 
 @media (max-width: 420px) {

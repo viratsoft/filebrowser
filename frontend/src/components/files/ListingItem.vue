@@ -24,23 +24,14 @@
   >
     <div>
       <img
-        v-if="
-          readOnly &&
-          type === 'image' &&
-          publicThumbnailUrl &&
-          !publicThumbnailFailed
-        "
-        :src="publicThumbnailUrl"
+        v-if="thumbnailUrl && !thumbnailFailed"
+        :key="thumbnailUrl"
+        :src="thumbnailUrl"
         :alt="name"
         loading="lazy"
         decoding="async"
         referrerpolicy="no-referrer"
-        @error="publicThumbnailFailed = true"
-      />
-      <img
-        v-else-if="!readOnly && type === 'image' && isThumbsEnabled"
-        v-lazy="thumbnailUrl"
-        :alt="name"
+        @error="thumbnailFailed = true"
       />
       <i v-else class="material-icons"></i>
     </div>
@@ -95,14 +86,6 @@ const props = defineProps<{
   publicThumbnailUrl?: string;
 }>();
 
-const publicThumbnailFailed = ref(false);
-watch(
-  () => props.publicThumbnailUrl,
-  () => {
-    publicThumbnailFailed.value = false;
-  }
-);
-
 const authStore = useAuthStore();
 const fileStore = useFileStore();
 const layoutStore = useLayoutStore();
@@ -130,16 +113,19 @@ const canDrop = computed(() => {
 });
 
 const thumbnailUrl = computed(() => {
-  const file = {
-    path: props.path,
-    modified: props.modified,
-  };
+  if (props.isDir || props.type !== "image") return undefined;
+  if (props.readOnly) return props.publicThumbnailUrl;
+  if (!enableThumbs || !props.path) return undefined;
 
-  return api.getPreviewURL(file as Resource, "thumb");
+  return api.getPreviewURL(
+    { path: props.path, modified: props.modified },
+    "thumb"
+  );
 });
 
-const isThumbsEnabled = computed(() => {
-  return enableThumbs;
+const thumbnailFailed = ref(false);
+watch(thumbnailUrl, () => {
+  thumbnailFailed.value = false;
 });
 
 const humanSize = () => {
