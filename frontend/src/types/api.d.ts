@@ -6,7 +6,7 @@ type ApiContent =
   | Pick<ReadableStreamDefaultReader<any>, "read">
   | "";
 
-interface ApiOpts {
+interface ApiOpts extends Pick<RequestInit, "cache" | "referrerPolicy"> {
   method?: ApiMethod;
   headers?: object;
   body?: any;
