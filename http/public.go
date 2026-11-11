@@ -25,6 +25,10 @@ var withHashFile = func(fn handleFunc) handleFunc {
 // Thumbnail reads only need metadata, not directory listings, subtitles or
 // file-content type expansion. All authorization and scope checks stay shared.
 func withHashFileOptions(fn handleFunc, expand bool) handleFunc {
+	return withShareFile(fn, expand, false)
+}
+
+func withShareFile(fn handleFunc, expand, strictDirectories bool) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 		id, ifPath := ifPathWithName(r)
 		link, err := d.store.Share.GetByHash(id)
@@ -51,7 +55,8 @@ func withHashFileOptions(fn handleFunc, expand bool) handleFunc {
 			return http.StatusNotFound, nil
 		}
 
-		user, err := d.store.Users.Get(d.server.Root, d.server.FollowExternalSymlinks, link.UserID)
+		followExternal := d.server.FollowExternalSymlinks && !strictDirectories
+		user, err := d.store.Users.Get(d.server.Root, followExternal, link.UserID)
 		if err != nil {
 			return errToStatus(err), err
 		}
@@ -61,6 +66,12 @@ func withHashFileOptions(fn handleFunc, expand bool) handleFunc {
 		}
 
 		d.user = user
+		basePath := slashClean(link.Path)
+		if strictDirectories {
+			if err := checkRealShareDirectories(user.Fs, basePath, d.Check); err != nil {
+				return errToStatus(err), err
+			}
+		}
 
 		file, err := files.NewFileInfo(&files.FileOptions{
 			Fs:         d.user.Fs,
@@ -84,8 +95,6 @@ func withHashFileOptions(fn handleFunc, expand bool) handleFunc {
 		// share base path. Canonicalized because it roots both the rebased
 		// filesystem and checkerPrefix below, and a stored path that is not
 		// "/"-separated would make the two disagree on Windows.
-		basePath := slashClean(link.Path)
-
 		// file relative path
 		filePath := ""
 
@@ -98,12 +107,17 @@ func withHashFileOptions(fn handleFunc, expand bool) handleFunc {
 		// share is also symlink-confined: a link inside the shared subtree that
 		// points elsewhere in the owner's scope — outside the share — must not be
 		// followed.
-		d.user.Fs = files.NewFs(d.user.Fs, basePath, d.server.FollowExternalSymlinks)
+		d.user.Fs = files.NewFs(d.user.Fs, basePath, followExternal)
 
 		// the filesystem is now rebased onto basePath, so paths handed to the
 		// rule checker are relative to it. Resolve them back to the user's
 		// original scope so deny rules below the share root keep applying.
 		d.checkerPrefix = basePath
+		if strictDirectories {
+			if err := checkRealShareDirectories(d.user.Fs, filePath, d.Check); err != nil {
+				return errToStatus(err), err
+			}
+		}
 
 		file, err = files.NewFileInfo(&files.FileOptions{
 			Fs:      d.user.Fs,
@@ -337,6 +351,16 @@ func createVisitorSessionFolder(afs afero.Fs, folder string, mode os.FileMode) (
 	}
 	return false, err
 }
+
+// A browser can check access without starting an attachment or building a ZIP.
+var publicDownloadCheckHandler = withHashFileOptions(func(w http.ResponseWriter, _ *http.Request, d *data) (int, error) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	if d.rawShare.UploadOnly {
+		return http.StatusForbidden, nil
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return 0, nil
+}, false)
 
 var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	w.Header().Set("Cache-Control", "private, no-store")

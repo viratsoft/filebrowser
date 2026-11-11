@@ -1,6 +1,8 @@
 package fbhttp
 
 import (
+	"archive/zip"
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +21,83 @@ import (
 	"github.com/spf13/afero"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func TestPublicFolderZIPOmitsInProgressUploads(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "shared", "nested"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"nested/ready.jpg", "nested/.filebrowser-upload-pending"} {
+		if err := os.WriteFile(filepath.Join(root, "shared", name), []byte("file"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true}, []byte("share-zip"))
+	if err := st.Share.Save(&share.Link{Hash: "zip", Path: "/shared", UserID: 1, AllowUpload: true}); err != nil {
+		t.Fatal(err)
+	}
+	handler := handle(publicDlHandler, "/api/public/dl/", st, &settings.Server{})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/public/dl/zip/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("archive request returned %d: %s", rec.Code, rec.Body.String())
+	}
+	archive, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, entry := range archive.File {
+		if strings.Contains(entry.Name, ".filebrowser-upload-") {
+			t.Fatalf("archive includes a temporary upload: %q", entry.Name)
+		}
+		found = found || entry.Name == "nested/ready.jpg"
+	}
+	if !found {
+		t.Fatal("archive omitted the completed file")
+	}
+}
+
+func TestPublicDownloadCheckEnforcesShareAccess(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "shared"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "shared", "photo.jpg"), []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true}, []byte("download-check"))
+	for _, link := range []*share.Link{
+		{Hash: "public", Path: "/shared", UserID: 1},
+		{Hash: "protected", Path: "/shared", UserID: 1, PasswordHash: "protected", Token: "share-token"},
+		{Hash: "expired", Path: "/shared", UserID: 1, Expire: 1},
+		{Hash: "upload", Path: "/shared", UserID: 1, AllowUpload: true, UploadOnly: true},
+	} {
+		if err := st.Share.Save(link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	handler := handle(publicDownloadCheckHandler, "/api/public/dl/", st, &settings.Server{})
+	for path, status := range map[string]int{
+		"public/photo.jpg":                      http.StatusNoContent,
+		"public/missing.jpg":                    http.StatusNotFound,
+		"protected/photo.jpg":                   http.StatusUnauthorized,
+		"protected/photo.jpg?token=share-token": http.StatusNoContent,
+		"expired/photo.jpg":                     http.StatusNotFound,
+		"upload/":                               http.StatusForbidden,
+	} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/api/public/dl/"+path, nil))
+			if rec.Code != status {
+				t.Fatalf("status = %d, want %d", rec.Code, status)
+			}
+			if status == http.StatusNoContent && (rec.Body.Len() != 0 || rec.Header().Get("Cache-Control") != "private, no-store") {
+				t.Fatal("download check should only return an uncacheable authorization result")
+			}
+		})
+	}
+}
 
 func TestPublicShareHandlerAuthentication(t *testing.T) {
 	t.Parallel()

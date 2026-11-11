@@ -105,7 +105,7 @@ var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) 
 })
 
 func getFiles(d *data, path, commonPath string) ([]archives.FileInfo, error) {
-	if !d.Check(path) {
+	if !d.Check(path) || (d.rawShare != nil && isPublicUploadTempPath(slashClean(path))) {
 		return nil, nil
 	}
 

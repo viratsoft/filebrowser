@@ -17,6 +17,7 @@ import Info from "./Info.vue";
 import Delete from "./Delete.vue";
 import DeleteUser from "./DeleteUser.vue";
 import Download from "./Download.vue";
+import ShareDownload from "./ShareDownload.vue";
 import Rename from "./Rename.vue";
 import Move from "./Move.vue";
 import Copy from "./Copy.vue";
@@ -44,6 +45,7 @@ const components = new Map<string, any>([
   ["newFile", NewFile],
   ["newDir", NewDir],
   ["download", Download],
+  ["share-download", ShareDownload],
   ["replace", Replace],
   ["share", Share],
   ["upload", Upload],

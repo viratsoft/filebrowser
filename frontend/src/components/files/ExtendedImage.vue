@@ -96,6 +96,7 @@ let observer: ResizeObserver | null = null;
 let xhr: XMLHttpRequest | null = null;
 let disposed = false;
 let decodeAttempted = false;
+let imageDecoded = false;
 let lastLegacyTouch = -Infinity;
 let tapTimer: ReturnType<typeof setTimeout> | null = null;
 let swipeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -300,14 +301,16 @@ function resize() {
   clearSwipeTimer();
   animate.value = false;
   model.setViewport(container.value.clientWidth, container.value.clientHeight);
+  if (imageDecoded) ready.value = model.fitted.width > 0;
   publish();
 }
 function onLoad(event: Event) {
   if (disposed || event.target !== imgex.value || !imgex.value) return;
-  model.setImage(imgex.value.naturalWidth, imgex.value.naturalHeight);
+  const { naturalWidth, naturalHeight } = imgex.value;
+  imageDecoded = naturalWidth > 0 && naturalHeight > 0;
+  failed.value = !imageDecoded;
+  model.setImage(naturalWidth, naturalHeight);
   resize();
-  ready.value = model.fitted.width > 0;
-  failed.value = !ready.value;
 }
 function onError(event?: Event) {
   if (disposed || (event && event.target !== imgex.value)) return;
@@ -333,6 +336,7 @@ function onError(event?: Event) {
     decodeImage();
     return;
   }
+  imageDecoded = false;
   ready.value = false;
   failed.value = true;
   cancelGesture();
@@ -350,6 +354,7 @@ async function loadImage() {
   ready.value = false;
   failed.value = false;
   decodeAttempted = false;
+  imageDecoded = false;
   animate.value = false;
   model.setImage(0, 0);
   publish();

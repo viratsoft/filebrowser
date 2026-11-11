@@ -125,16 +125,7 @@
     </div>
     <div v-else-if="req !== null">
       <div class="share">
-        <div
-          v-if="!isUploadOnly"
-          class="share__box share__box__info"
-          style="
-            position: -webkit-sticky;
-            position: sticky;
-            top: -20.6em;
-            z-index: 999;
-          "
-        >
+        <div v-if="!isUploadOnly" class="share__box share__box__info">
           <div class="share__box__header" style="height: 3em">
             {{
               req.isDir
@@ -154,142 +145,58 @@
           <div v-if="!req.isDir" class="share__box__element" :title="modTime">
             <strong>{{ $t("prompts.lastModified") }}:</strong> {{ humanTime }}
           </div>
-          <div class="share__box__element" style="height: 3em">
-            <strong
-              >{{ $t(req.isDir ? "files.files" : "prompts.size") }}:</strong
+          <div
+            v-if="req.isDir"
+            class="share__box__element share-folder-summary"
+          >
+            <span
+              ><strong>{{ t("files.files") }}:</strong> {{ humanSize }}</span
             >
-            {{ humanSize }}
+            <share-folder-size
+              :key="req.url"
+              :url="req.url"
+              :password="password"
+              :token="token"
+            />
           </div>
-          <div class="share__box__element share__box__center">
-            <a
-              target="_blank"
-              :href="link"
-              class="button button--flat"
-              style="height: 4em"
+          <div v-else class="share__box__element" style="height: 3em">
+            <strong>{{ t("prompts.size") }}:</strong> {{ humanSize }}
+          </div>
+          <div v-if="req.isDir" class="share__box__element share-download-qr">
+            <button
+              type="button"
+              class="button share-download-cta"
+              @click="downloadFolder"
             >
-              <div>
-                <i class="material-icons">file_download</i
-                >{{ t("buttons.download") }}
-              </div>
+              <i class="material-icons" aria-hidden="true">file_download</i>
+              {{ t("buttons.download") }}
+            </button>
+            <qrcode-vue :value="link" :size="100" level="M" />
+          </div>
+          <div v-else class="share__box__element share__box__center">
+            <a
+              :href="link"
+              class="button share-download-cta"
+              referrerpolicy="no-referrer"
+              download
+            >
+              <i class="material-icons" aria-hidden="true">file_download</i>
+              {{ t("buttons.download") }}
             </a>
             <a
               target="_blank"
               :href="inlineLink"
               class="button button--flat"
-              v-if="!req.isDir"
+              rel="noopener noreferrer"
             >
               <div>
                 <i class="material-icons">open_in_new</i
                 >{{ t("buttons.openFile") }}
               </div>
             </a>
-            <qrcode-vue
-              v-if="req.isDir"
-              :value="link"
-              :size="100"
-              level="M"
-            ></qrcode-vue>
           </div>
           <div v-if="!req.isDir" class="share__box__element share__box__center">
             <qrcode-vue :value="link" :size="200" level="M"></qrcode-vue>
-          </div>
-          <div
-            v-if="req.isDir"
-            class="share__box__element share__box__header"
-            style="height: 3em"
-          >
-            {{ $t("sidebar.preview") }}
-          </div>
-          <div
-            v-if="req.isDir"
-            class="share__box__element share__box__center share__box__icon"
-            style="padding: 0em !important; height: 12em !important"
-          >
-            <a
-              :href="req.items[fileStore.selected[0]]?.url"
-              @click.prevent="
-                router.push({ path: req.items[fileStore.selected[0]].url })
-              "
-              class="button button--flat"
-              v-if="
-                !fileStore.multiple &&
-                fileStore.selectedCount === 1 &&
-                req.items[fileStore.selected[0]].type === 'image'
-              "
-              style="height: 12em; padding: 0; margin: 0"
-            >
-              <img
-                style="height: 12em"
-                :src="selectedImageSource"
-                :alt="req.items[fileStore.selected[0]].name"
-              />
-            </a>
-            <div
-              v-else-if="
-                fileStore.multiple &&
-                fileStore.selectedCount === 1 &&
-                req.items[fileStore.selected[0]].type === 'audio'
-              "
-              style="height: 12em; padding-top: 1em; margin: 0"
-            >
-              <button
-                @click="play"
-                v-if="!tag"
-                style="
-                  font-size: 6em !important;
-                  border: 0px;
-                  outline: none;
-                  background: white;
-                "
-                class="material-icons"
-              >
-                play_circle_filled
-              </button>
-              <button
-                @click="play"
-                v-if="tag"
-                style="
-                  font-size: 6em !important;
-                  border: 0px;
-                  outline: none;
-                  background: white;
-                "
-                class="material-icons"
-              >
-                pause_circle_filled
-              </button>
-              <audio
-                id="myaudio"
-                ref="audio"
-                :src="raw"
-                controls
-                :autoplay="tag"
-              ></audio>
-            </div>
-            <video
-              v-else-if="
-                !fileStore.multiple &&
-                fileStore.selectedCount === 1 &&
-                req.items[fileStore.selected[0]].type === 'video'
-              "
-              style="height: 12em; padding: 0; margin: 0"
-              :src="raw"
-              controls
-            >
-              Sorry, your browser doesn't support embedded videos, but don't
-              worry, you can <a :href="raw">download it</a>
-              and watch it with your favorite video player!
-            </video>
-            <i
-              v-else-if="
-                !fileStore.multiple &&
-                fileStore.selectedCount === 1 &&
-                req.items[fileStore.selected[0]].isDir
-              "
-              class="material-icons"
-              >folder
-            </i>
-            <i v-else class="material-icons">call_to_action</i>
           </div>
         </div>
         <div v-else class="share__box share__box__info upload-only-info">
@@ -421,7 +328,6 @@ import { filesize } from "@/utils";
 import { listingViewModes } from "@/utils/listing-view-modes";
 import dayjs from "dayjs";
 import { Base64 } from "js-base64";
-import { createURL } from "@/api/utils";
 import HeaderBar from "@/components/header/HeaderBar.vue";
 import Action from "@/components/header/Action.vue";
 import SelectAllButton from "@/components/header/SelectAllButton.vue";
@@ -430,6 +336,7 @@ import Errors from "@/views/Errors.vue";
 import QrcodeVue from "qrcode.vue";
 import Item from "@/components/files/ListingItem.vue";
 import PublicMediaPreview from "@/components/files/PublicMediaPreview.vue";
+import ShareFolderSize from "@/components/files/ShareFolderSize.vue";
 import urlUtils from "@/utils/url";
 import { closeGalleryRoute } from "@/utils/gallery-history";
 import { name as appName } from "@/utils/constants";
@@ -448,8 +355,6 @@ const password = ref<string>("");
 const attemptedPasswordLogin = ref<boolean>(false);
 const hash = ref<string>("");
 const token = ref<string>("");
-const audio = ref<HTMLAudioElement>();
-const tag = ref<boolean>(false);
 const uploadInput = ref<HTMLInputElement>();
 const originalImage = ref(false);
 const viewMode = ref<ViewModeType>("list");
@@ -503,27 +408,9 @@ const icon = computed(() => {
 });
 
 const link = computed(() => (req.value ? api.getDownloadURL(req.value) : ""));
-const raw = computed(() => {
-  if (!req.value || !req.value.items[fileStore.selected[0]]) return "";
-  return createURL(
-    `api/public/dl/${hash.value}${req.value.items[fileStore.selected[0]].path}`,
-    { token: token.value }
-  );
-});
 const inlineLink = computed(() =>
   req.value ? api.getDownloadURL(req.value, true) : ""
 );
-const selectedImageSource = computed(() => {
-  const item = req.value?.items?.[fileStore.selected[0]];
-  if (!req.value || !item || isUploadOnly.value) return "";
-  return !originalImage.value && req.value.allowImagePreview
-    ? api.getImagePreviewURL({
-        ...req.value,
-        hash: hash.value,
-        path: item.path,
-      })
-    : raw.value;
-});
 const humanSize = computed(() => {
   if (req.value) {
     return req.value.isDir
@@ -542,15 +429,6 @@ const modTime = computed(() =>
 
 // Functions
 const base64 = (name: any) => Base64.encodeURI(name);
-const play = () => {
-  if (tag.value) {
-    audio.value?.pause();
-    tag.value = false;
-  } else {
-    audio.value?.play();
-    tag.value = true;
-  }
-};
 const fetchData = async () => {
   if (disposed) return;
   const generation = ++fetchGeneration;
@@ -665,42 +543,84 @@ watch(
   }
 );
 
-const isSingleFile = () =>
-  fileStore.selectedCount === 1 &&
-  !req.value?.items[fileStore.selected[0]].isDir;
+const isSingleFile = () => {
+  const item = req.value?.items?.[fileStore.selected[0]];
+  return fileStore.selectedCount === 1 && !!item && !item.isDir;
+};
 
 const download = () => {
-  if (!req.value) return false;
+  const share = req.value;
+  if (!share?.isDir || share.uploadOnly || layoutStore.loading) return;
+  const selected = fileStore.selected
+    .map((index) => share.items[index])
+    .filter(Boolean);
+  if (!selected.length) return;
 
-  if (isSingleFile()) {
-    api.download(
-      null,
-      hash.value,
-      token.value,
-      req.value.items[fileStore.selected[0]].path
-    );
-    return true;
+  const paths = selected.map((item) => item.path);
+  const urls = paths.map((path) =>
+    api.getDownloadURL({ ...share, hash: hash.value, token: token.value, path })
+  );
+  const files = selected.filter((item) => !item.isDir);
+  const includesFolders = files.length !== selected.length;
+  const selectedBytes = files.length
+    ? files.reduce((total, item) => total + item.size, 0)
+    : undefined;
+  if (selected.length === 1 && !includesFolders) {
+    api.startDownload(urls[0]);
+    return;
   }
 
+  openShareDownload({
+    archiveURL: api.getZipDownloadURL(hash.value, token.value, paths),
+    zipChecks: urls,
+    individualURLs: async () => urls,
+    includesFolders,
+    selectedBytes,
+  });
+};
+
+const downloadFolder = () => {
+  const share = req.value;
+  if (!share?.isDir || share.uploadOnly || layoutStore.loading) return;
+  const sharePassword = password.value;
+  openShareDownload({
+    archiveURL: api.getDownloadURL(share),
+    individualURLs: (signal) =>
+      api.getFolderFileDownloadURLs(share, sharePassword, signal),
+  });
+};
+
+function openShareDownload({
+  archiveURL,
+  zipChecks = [],
+  individualURLs,
+  includesFolders = false,
+  selectedBytes,
+}: {
+  archiveURL: string;
+  zipChecks?: string[];
+  individualURLs: (signal: AbortSignal) => Promise<string[]>;
+  includesFolders?: boolean;
+  selectedBytes?: number;
+}) {
+  const openedOn = route.fullPath;
   layoutStore.showHover({
-    prompt: "download",
-    confirm: (format: DownloadFormat) => {
-      if (req.value === null) return false;
-      layoutStore.closeHovers();
-
-      const files: string[] = [];
-
-      for (const i of fileStore.selected) {
-        files.push(req.value.items[i].path);
-      }
-
-      api.download(format, hash.value, token.value, ...files);
-      return true;
+    prompt: "share-download",
+    props: { includesFolders, selectedBytes },
+    confirm: async (mode: "all" | "zip", signal: AbortSignal) => {
+      if (mode === "all" && includesFolders) return;
+      const downloads =
+        mode === "zip" ? [archiveURL] : await individualURLs(signal);
+      if (signal.aborted || route.fullPath !== openedOn) return;
+      await api.checkDownloads(
+        mode === "zip" ? [...zipChecks, archiveURL] : downloads,
+        signal
+      );
+      if (signal.aborted || route.fullPath !== openedOn) return;
+      for (const url of downloads) api.startDownload(url);
     },
   });
-
-  return true;
-};
+}
 
 const linkSelected = () => {
   return isSingleFile() && req.value
@@ -750,6 +670,42 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.share-folder-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.8rem;
+  padding-block: 0.45rem;
+  word-break: normal;
+}
+
+.share-download-qr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.share__box__element .share-download-cta {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.share-download-cta:hover {
+  color: #fff;
+}
+
+.share__box__element .share-download-cta .material-icons {
+  display: inline-block;
+  margin: 0;
+  font-size: 1.2rem;
+}
+
 #listing.list {
   height: auto;
 }

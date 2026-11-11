@@ -11,7 +11,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { filesize } from "@/utils";
+import { filesize } from "filesize";
 
 const props = defineProps<{
   filename: string;
@@ -26,7 +26,7 @@ const hasPosition = computed(
 const sizeLabel = computed(() => {
   const bytes = props.bytes;
   return bytes !== undefined && Number.isFinite(bytes) && bytes >= 0
-    ? filesize(bytes)
+    ? filesize(bytes, { base: 10, symbols: { kB: "KB" } })
     : "";
 });
 </script>

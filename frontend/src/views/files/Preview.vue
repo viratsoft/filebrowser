@@ -85,7 +85,19 @@
         class="preview"
         :class="{ 'image-gallery-viewport': fileStore.req?.type === 'image' }"
       >
-        <GalleryStage :changing="changingSlide" :backward="backward">
+        <GalleryStage
+          :changing="changingSlide"
+          :backward="backward"
+          :swipe-media="
+            fileStore.req?.type === 'video' || fileStore.req?.type === 'audio'
+          "
+          :can-go-next="hasNext && !layoutStore.loading && !navigationPending"
+          :can-go-previous="
+            hasPrevious && !layoutStore.loading && !navigationPending
+          "
+          @next="next"
+          @previous="prev"
+        >
           <div v-if="isEpub" class="epub-reader">
             <vue-reader
               :location="location"
@@ -136,7 +148,7 @@
           />
           <audio
             v-else-if="fileStore.req?.type == 'audio'"
-            ref="player"
+            ref="audioPlayer"
             :src="previewUrl"
             controls
             :autoplay="autoPlay"
@@ -144,7 +156,8 @@
           ></audio>
           <VideoPlayer
             v-else-if="fileStore.req?.type == 'video'"
-            ref="player"
+            :key="fileStore.req.path"
+            ref="videoPlayer"
             :source="previewUrl"
             :subtitles="subtitles"
             :options="videoOptions"
@@ -303,7 +316,8 @@ const autoPlay = ref<boolean>(false);
 const csvContent = ref<ArrayBuffer | string>("");
 const csvError = ref<string>("");
 
-const player = ref<HTMLVideoElement | HTMLAudioElement | null>(null);
+const audioPlayer = ref<HTMLAudioElement | null>(null);
+const videoPlayer = ref<InstanceType<typeof VideoPlayer> | null>(null);
 
 const $showError = inject<IToastError>("$showError")!;
 
@@ -506,7 +520,10 @@ const updatePreview = async () => {
   }
   previousLink.value = "";
   nextLink.value = "";
-  if (player.value && player.value.paused && !player.value.ended) {
+  if (
+    (audioPlayer.value?.paused && !audioPlayer.value.ended) ||
+    videoPlayer.value?.isPausedBeforeEnd()
+  ) {
     autoPlay.value = false;
   }
 

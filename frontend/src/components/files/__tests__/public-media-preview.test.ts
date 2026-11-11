@@ -81,7 +81,7 @@ afterEach(() => {
 describe("public gallery navigation and quality", () => {
   it("returns directly to the folder on Back after multiple slides", async () => {
     const folder = "/share/hash/";
-    const second = photo("b.jpg");
+    const second: Resource = { ...photo("b.mp4"), type: "video" };
     const third = photo("c.jpg");
     const router = createRouter({
       history: createMemoryHistory(),
@@ -104,6 +104,9 @@ describe("public gallery navigation and quality", () => {
     expect(view.siblings.value).toHaveLength(3);
     await view.go(view.next.value);
     expect(router.currentRoute.value.path).toBe(third.url);
+    props.file = third;
+    await nextTick();
+    expect(view.source.value).toBe("preview:hash:/c.jpg");
 
     const back = new Promise<void>((resolve) => {
       const unsubscribe = router.afterEach(() => {
@@ -146,7 +149,7 @@ describe("public gallery navigation and quality", () => {
     expect(view.currentIndex.value).toBe(-1);
   });
 
-  it("offers the original download only for readable share image slides", async () => {
+  it("offers the original download for readable share media slides", async () => {
     const { props, view } = await setup();
     expect(view.downloadURL.value).toBe("download:hash:/a.jpg");
     props.original = true;
@@ -154,7 +157,10 @@ describe("public gallery navigation and quality", () => {
     expect(view.downloadURL.value).toBe("download:hash:/a.jpg");
     props.file = { ...photo("video.mp4"), type: "video" };
     await nextTick();
-    expect(view.downloadURL.value).toBe("");
+    expect(view.downloadURL.value).toBe("download:hash:/video.mp4");
+    props.file = { ...photo("audio.mp3"), type: "audio" };
+    await nextTick();
+    expect(view.downloadURL.value).toBe("download:hash:/audio.mp3");
     props.file = { ...photo(), uploadOnly: true };
     await nextTick();
     expect(view.downloadURL.value).toBe("");

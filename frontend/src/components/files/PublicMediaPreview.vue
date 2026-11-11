@@ -42,7 +42,15 @@
       class="preview"
       :class="{ 'image-gallery-viewport': file.type === 'image' }"
     >
-      <gallery-stage :changing="changingSlide" :backward="backward">
+      <gallery-stage
+        :changing="changingSlide"
+        :backward="backward"
+        :swipe-media="file.type === 'video' || file.type === 'audio'"
+        :can-go-next="!!next && !navigating && !layout.loading"
+        :can-go-previous="!!previous && !navigating && !layout.loading"
+        @next="go(next)"
+        @previous="go(previous)"
+      >
         <extended-image
           v-if="file.type === 'image' && source"
           :key="file.path"
@@ -142,8 +150,8 @@ const effectiveOriginal = computed(
 );
 const downloadDisabled = computed(() => layout.loading || navigating.value);
 const downloadURL = computed(() =>
-  props.file.type === "image" &&
   !props.file.uploadOnly &&
+  !props.file.isDir &&
   (!props.password || props.file.token)
     ? api.getDownloadURL(props.file)
     : ""
@@ -339,6 +347,12 @@ watch(
     if (controlsTimer !== null) clearTimeout(controlsTimer);
     controlsTimer = null;
     if (type !== previousType) showControls.value = true;
+  }
+);
+watch(
+  () => layout.loading,
+  (loading) => {
+    if (!loading) pendingPath.value = "";
   }
 );
 onMounted(() => window.addEventListener("keydown", key));

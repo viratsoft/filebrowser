@@ -1,4 +1,4 @@
-import { fetchURL, removePrefix, createURL } from "./utils";
+import { fetchURL, removePrefix, createURL, StatusError } from "./utils";
 import { imagePreviewURL } from "./image-preview-url";
 import { baseURL } from "@/utils/constants";
 import * as tus from "tus-js-client";
@@ -78,37 +78,24 @@ export async function fetch(
   return data;
 }
 
-export function download(
-  format: DownloadFormat,
-  hash: string,
+export async function folderSize(
+  url: string,
+  password: string,
   token: string,
-  ...files: string[]
-) {
-  let url = `${baseURL}/api/public/dl/${hash}`;
-
-  if (files.length === 1) {
-    url += files[0] + "?";
-  } else {
-    let arg = "";
-
-    for (const file of files) {
-      arg += file + ",";
-    }
-
-    arg = arg.substring(0, arg.length - 1);
-    arg = encodeURIComponent(arg);
-    url += `/?files=${arg}&`;
-  }
-
-  if (format) {
-    url += `algo=${format}&`;
-  }
-
-  if (token) {
-    url += `token=${token}&`;
-  }
-
-  window.open(url);
+  signal: AbortSignal
+): Promise<{ size: number; incomplete?: boolean }> {
+  const query = token ? `?${new URLSearchParams({ token })}` : "";
+  const response = await fetchURL(
+    `/api/public/size${removePrefix(url)}${query}`,
+    {
+      signal,
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+      headers: { "X-SHARE-PASSWORD": encodeURIComponent(password) },
+    },
+    false
+  );
+  return response.json();
 }
 
 export function getDownloadURL(res: Resource, inline = false) {
@@ -118,6 +105,85 @@ export function getDownloadURL(res: Resource, inline = false) {
   };
 
   return createURL("api/public/dl/" + res.hash + res.path, params);
+}
+
+export function getZipDownloadURL(
+  hash: string,
+  token: string,
+  paths: string[]
+) {
+  return createURL("api/public/dl/" + hash + "/", {
+    algo: "zip",
+    // The existing archive API decodes each entry after splitting the list.
+    files: paths.map((path) => encodeURIComponent(path)).join(","),
+    ...(token && { token }),
+  });
+}
+
+export class ShareFolderDownloadError extends Error {
+  constructor(public reason: "empty" | "linked-folder") {
+    super(reason);
+  }
+}
+
+export async function getFolderFileDownloadURLs(
+  folder: Resource,
+  password: string,
+  signal: AbortSignal
+) {
+  const urls: string[] = [];
+  const pending = [folder.url];
+  while (pending.length && !signal.aborted) {
+    const current = pending.pop()!;
+    const listing = await fetch(current, password, signal, folder.token);
+    if (!listing.isDir || listing.uploadOnly) throw new StatusError("", 403);
+    for (const item of listing.items) {
+      if (item.isDir) {
+        // Linked folders can lead back to an ancestor. ZIP remains available.
+        if (item.isSymlink) throw new ShareFolderDownloadError("linked-folder");
+        pending.push(item.url);
+      } else {
+        urls.push(getDownloadURL({ ...folder, path: item.path }));
+      }
+    }
+  }
+  if (!signal.aborted && !urls.length)
+    throw new ShareFolderDownloadError("empty");
+  return urls;
+}
+
+export async function checkDownloads(urls: string[], signal: AbortSignal) {
+  const batchSize = 6;
+  for (let i = 0; i < urls.length; i += batchSize) {
+    if (signal.aborted) return;
+    await Promise.all(
+      urls.slice(i, i + batchSize).map(async (url) => {
+        const response = await globalThis.fetch(url, {
+          method: "HEAD",
+          signal,
+          cache: "no-store",
+          referrerPolicy: "no-referrer",
+          redirect: "error",
+        });
+        if (!response.ok)
+          throw new StatusError(response.statusText, response.status);
+      })
+    );
+  }
+}
+
+export function startDownload(url: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "";
+  link.referrerPolicy = "no-referrer";
+  link.hidden = true;
+  document.body.append(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+  }
 }
 
 export function getThumbnailURL(

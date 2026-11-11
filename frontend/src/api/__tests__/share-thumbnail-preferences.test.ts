@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as shares from "../share";
 import * as publicApi from "../pub";
 import { imagePreviewURL } from "../image-preview-url";
-import { createURL, fetchJSON, fetchURL } from "../utils";
+import { createURL, fetchJSON, fetchURL, removePrefix } from "../utils";
 
 vi.mock("../utils", () => ({
   fetchURL: vi.fn(),
@@ -94,6 +94,60 @@ describe("share thumbnail preferences and URLs", () => {
       "api/public/thumb/hash/nested/photo #1.png",
       { v: "modified", token: "share-token" }
     );
+  });
+
+  it("collects individual files from the current shared folder and its subfolders", async () => {
+    vi.mocked(removePrefix).mockImplementation((value) =>
+      value.replace(/^\/share/, "")
+    );
+    vi.mocked(fetchURL)
+      .mockResolvedValueOnce({
+        json: async () => ({
+          isDir: true,
+          items: [
+            { name: "direct.jpg", path: "/current/direct.jpg" },
+            { name: "nested", isDir: true },
+          ],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        json: async () => ({
+          isDir: true,
+          items: [{ name: "nested.mp4", path: "/current/nested/nested.mp4" }],
+        }),
+      } as Response);
+    const signal = new AbortController().signal;
+    const urls = await publicApi.getFolderFileDownloadURLs(
+      {
+        hash: "hash",
+        token: "share-token",
+        url: "/share/hash/current/",
+      } as Resource,
+      "share-password",
+      signal
+    );
+    expect(urls).toHaveLength(2);
+    expect(fetchURL).toHaveBeenLastCalledWith(
+      "/api/public/share/hash/current/nested/?token=share-token",
+      { headers: { "X-SHARE-PASSWORD": "share-password" }, signal },
+      false
+    );
+    expect(createURL).toHaveBeenCalledWith(
+      "api/public/dl/hash/current/nested/nested.mp4",
+      { token: "share-token" }
+    );
+  });
+
+  it("encodes each share ZIP path before joining the archive list", () => {
+    publicApi.getZipDownloadURL("hash", "share-token", [
+      "/folder/a,b #1.jpg",
+      "/folder/100%.mp4",
+    ]);
+    expect(createURL).toHaveBeenCalledWith("api/public/dl/hash/", {
+      algo: "zip",
+      token: "share-token",
+      files: "%2Ffolder%2Fa%2Cb%20%231.jpg,%2Ffolder%2F100%25.mp4",
+    });
   });
 
   it("does not add an empty token to an unprotected thumbnail URL", () => {

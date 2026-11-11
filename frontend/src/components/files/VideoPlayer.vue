@@ -1,24 +1,32 @@
 <template>
-  <video ref="videoPlayer" class="video-max video-js" controls preload="auto">
-    <source />
-    <track
-      kind="subtitles"
-      v-for="(sub, index) in subtitles"
-      :key="index"
-      :src="sub"
-      :label="subLabel(sub)"
-      :default="index === 0"
-    />
-    <p class="vjs-no-js">
-      Sorry, your browser doesn't support embedded videos, but don't worry, you
-      can <a :href="source">download it</a>
-      and watch it with your favorite video player!
-    </p>
-  </video>
+  <div class="gallery-video">
+    <video
+      ref="videoPlayer"
+      class="video-js"
+      controls
+      playsinline
+      preload="auto"
+    >
+      <source />
+      <track
+        kind="subtitles"
+        v-for="(sub, index) in subtitles"
+        :key="index"
+        :src="sub"
+        :label="subLabel(sub)"
+        :default="index === 0"
+      />
+      <p class="vjs-no-js">
+        Sorry, your browser doesn't support embedded videos, but don't worry,
+        you can <a :href="source">download it</a>
+        and watch it with your favorite video player!
+      </p>
+    </video>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ref, shallowRef, onMounted, onBeforeUnmount } from "vue";
 import videojs from "video.js";
 import type Player from "video.js/dist/types/player";
 import "videojs-mobile-ui";
@@ -26,8 +34,9 @@ import "videojs-hotkeys";
 import "video.js/dist/video-js.min.css";
 import "videojs-mobile-ui/dist/videojs-mobile-ui.css";
 
-const videoPlayer = ref<HTMLElement | null>(null);
-const player = ref<Player | null>(null);
+const videoPlayer = ref<HTMLVideoElement | null>(null);
+const player = shallowRef<Player | null>(null);
+let disposed = false;
 
 const props = withDefaults(
   defineProps<{
@@ -40,20 +49,19 @@ const props = withDefaults(
   }
 );
 
-const source = ref(props.source);
-const sourceType = ref("");
-
-nextTick(() => {
-  initVideoPlayer();
-});
-
-onMounted(() => {});
+onMounted(() => void initVideoPlayer());
 
 onBeforeUnmount(() => {
-  if (player.value) {
-    player.value.dispose();
-    player.value = null;
-  }
+  disposed = true;
+  player.value?.dispose();
+  player.value = null;
+});
+
+defineExpose({
+  isPausedBeforeEnd: () => {
+    const instance = player.value;
+    return !!instance && instance.paused() && !instance.ended();
+  },
 });
 
 const initVideoPlayer = async () => {
@@ -62,14 +70,14 @@ const initVideoPlayer = async () => {
     const languagePack = await (
       languageImports[lang] || languageImports.en
     )?.();
+    const element = videoPlayer.value;
+    if (disposed || !element) return;
     const code = languageImports[lang] ? lang : "en";
     videojs.addLanguage(code, languagePack.default);
-    sourceType.value = "";
 
-    //
-    sourceType.value = getSourceType(source.value);
-
-    const srcOpt = { sources: { src: props.source, type: sourceType.value } };
+    const srcOpt = {
+      sources: [{ src: props.source, type: getSourceType(props.source) }],
+    };
     //Supporting localized language display.
     const langOpt = { language: code };
     // support for playback at different speeds.
@@ -80,13 +88,14 @@ const initVideoPlayer = async () => {
       srcOpt,
       playbackRatesOpt
     );
-    player.value = videojs(videoPlayer.value!, options, () => {});
-
-    // TODO: need to test on mobile
+    // Video.js owns the inner element and can detach it on dispose.
+    // The outer wrapper stays in Vue's DOM for the next slide's insertion.
+    const instance = videojs(element, options);
+    player.value = instance;
     // @ts-expect-error no ts definition for mobileUi
-    player.value!.mobileUi();
+    instance.mobileUi();
   } catch (error) {
-    console.error("Error initializing video player:", error);
+    if (!disposed) console.error("Error initializing video player:", error);
   }
 };
 
@@ -179,7 +188,8 @@ const languageImports: LanguageImports = {
 };
 </script>
 <style scoped>
-.video-max {
+.gallery-video,
+.gallery-video :deep(.video-js) {
   width: 100%;
   height: 100%;
 }
