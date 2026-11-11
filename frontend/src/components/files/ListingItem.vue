@@ -39,7 +39,7 @@
       <i v-else class="material-icons"></i>
     </div>
 
-    <div>
+    <div class="listing-details">
       <p class="name">{{ name }}</p>
 
       <p v-if="isDir" class="size" data-order="-1">&mdash;</p>

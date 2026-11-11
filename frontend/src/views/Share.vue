@@ -752,6 +752,40 @@ onBeforeUnmount(() => {
   font-size: 1.05em;
 }
 
+@media (max-width: 736px) {
+  #listing.list :deep(.shared-listing-item .listing-details) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0.75rem;
+    row-gap: 0.2rem;
+    min-width: 0;
+  }
+
+  #listing.list :deep(.shared-listing-item .listing-details > .name) {
+    grid-area: 1 / 1;
+    width: auto;
+  }
+
+  #listing.list :deep(.shared-listing-item[data-dir="false"] .size) {
+    display: block;
+    grid-area: 2 / 1;
+    width: auto;
+    color: var(--textSecondary);
+    font-size: 0.75rem;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+
+  #listing.list :deep(.shared-listing-item[aria-selected="true"] .size) {
+    color: inherit;
+  }
+
+  #listing.list :deep(.shared-listing-item .listing-details > .modified) {
+    grid-area: 1 / 2 / span 2;
+    width: auto;
+  }
+}
+
 @media (max-width: 600px) {
   #shareList #listing.mosaic :deep(.item) {
     width: calc(50% - 1em);
