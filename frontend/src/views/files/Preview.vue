@@ -7,7 +7,10 @@
     @mousemove="revealNavigation"
     @touchstart="revealNavigation"
   >
-    <header-bar v-if="isPdf || isEpub || isCsv || showNav">
+    <header-bar
+      v-if="isPdf || isEpub || isCsv || showNav"
+      :class="{ 'gallery-toolbar': isGalleryMedia }"
+    >
       <action icon="close" :label="$t('buttons.close')" @action="close()" />
       <GalleryTitle
         v-if="isGalleryMedia"
@@ -17,24 +20,6 @@
         :bytes="layoutStore.loading ? undefined : fileStore.req?.size"
       />
       <title v-else>{{ name }}</title>
-      <GalleryQualityButton
-        v-if="isResizeEnabled && fileStore.req?.type === 'image'"
-        :disabled="layoutStore.loading || navigationPending"
-        :original="fullSize"
-        @toggle="toggleSize"
-      />
-      <GallerySelectionButton
-        v-if="isGalleryMedia && fileStore.req"
-        :selected="
-          fileStore.gallerySelection?.paths.includes(fileStore.req.path) ??
-          false
-        "
-        :disabled="layoutStore.loading || navigationPending"
-        @toggle="
-          fileStore.toggleGallerySelection(route.path, fileStore.req.path)
-        "
-      />
-
       <template #actions>
         <action
           :disabled="layoutStore.loading"
@@ -80,6 +65,19 @@
           icon="info"
           :label="$t('buttons.info')"
           show="info"
+        />
+      </template>
+      <template #trailing>
+        <GallerySelectionButton
+          v-if="isGalleryMedia && fileStore.req"
+          :selected="
+            fileStore.gallerySelection?.paths.includes(fileStore.req.path) ??
+            false
+          "
+          :disabled="layoutStore.loading || navigationPending"
+          @toggle="
+            fileStore.toggleGallerySelection(route.path, fileStore.req.path)
+          "
         />
       </template>
     </header-bar>
@@ -208,6 +206,12 @@
       </div>
     </template>
 
+    <GalleryQualityButton
+      v-if="showNav && isResizeEnabled && fileStore.req?.type === 'image'"
+      :disabled="layoutStore.loading || navigationPending"
+      :original="fullSize"
+      @toggle="toggleSize"
+    />
     <button
       @click="prev"
       @mouseover="hoverNav = true"
@@ -603,7 +607,11 @@ const updatePreview = async () => {
   }
 };
 
-const toggleSize = () => (fullSize.value = !fullSize.value);
+const toggleSize = () => {
+  if (!layoutStore.loading && !navigationPending.value) {
+    fullSize.value = !fullSize.value;
+  }
+};
 
 const toggleNavigation = throttle(function () {
   showNav.value = true;

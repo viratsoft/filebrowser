@@ -26,6 +26,8 @@
       @action="layoutStore.showHover('more')"
     />
 
+    <slot name="trailing" />
+
     <div
       class="overlay"
       v-show="layoutStore.currentPromptName == 'more'"

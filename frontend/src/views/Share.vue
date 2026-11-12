@@ -442,6 +442,7 @@ const fetchData = async () => {
   if (hash.value && hash.value !== shareHash) {
     password.value = "";
     token.value = "";
+    originalImage.value = false;
     attemptedPasswordLogin.value = false;
     loadedShare.value = false;
   }

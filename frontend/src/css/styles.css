@@ -186,6 +186,20 @@ main .spinner .bounce2 {
   z-index: 19999;
 }
 
+#previewer .gallery-toolbar {
+  column-gap: clamp(0.25rem, 1.5vw, 0.5rem);
+}
+
+#previewer .gallery-toolbar > .action {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  text-align: center;
+}
+
+#previewer .gallery-toolbar > #dropdown:empty {
+  display: none;
+}
+
 #previewer header > .action i {
   color: #fff;
   text-shadow: 1px 1px 1px #000000;

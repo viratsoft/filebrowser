@@ -447,14 +447,17 @@ html[dir="rtl"] #listing {
   place-items: center;
   margin-inline-start: 0.25rem;
   border-radius: 0.4rem;
-  color: var(--action);
+  color: var(--textPrimary);
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-#listing.responsive-listing.list .file-page-link .material-icons {
-  margin: 0;
-  font-size: 1.25rem;
+.file-page-chevron {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
 }
 
 #listing.responsive-listing.list .file-page-link:focus-visible,
@@ -480,8 +483,8 @@ html[dir="rtl"] #listing {
   outline-offset: -2px;
 }
 
-html[dir="rtl"] .file-page-link .material-icons {
-  transform: scaleX(-1);
+html[dir="rtl"] .file-page-chevron {
+  transform: rotate(-135deg);
 }
 
 @media (min-width: 737px) {

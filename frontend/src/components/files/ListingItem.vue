@@ -68,7 +68,7 @@
       @touchend.stop
       @contextmenu.stop
     >
-      <i class="material-icons" aria-hidden="true">chevron_right</i>
+      <span class="file-page-chevron" aria-hidden="true"></span>
     </router-link>
   </div>
 </template>

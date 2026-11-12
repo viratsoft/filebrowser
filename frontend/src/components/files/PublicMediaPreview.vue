@@ -6,7 +6,7 @@
     @wheel.prevent.stop
     @pointermove="revealVideoControls"
   >
-    <header-bar v-if="showControls">
+    <header-bar v-if="showControls" class="gallery-toolbar">
       <action
         icon="close"
         :label="t('buttons.close')"
@@ -17,18 +17,6 @@
         :position="singleFileShare ? 1 : currentIndex + 1"
         :total="singleFileShare ? 1 : siblings.length"
         :bytes="file.size"
-      />
-      <gallery-quality-button
-        v-if="file.type === 'image' && file.allowImagePreview"
-        :original="effectiveOriginal"
-        :disabled="layout.loading || navigating"
-        @toggle="toggleQuality"
-      />
-      <gallery-selection-button
-        v-if="!singleFileShare"
-        :selected="selected ?? false"
-        :disabled="layout.loading || navigating"
-        @toggle="emit('toggle-selection')"
       />
       <a
         v-if="downloadURL"
@@ -43,6 +31,14 @@
       >
         <i class="material-icons" aria-hidden="true">file_download</i>
       </a>
+      <template #trailing>
+        <gallery-selection-button
+          v-if="!singleFileShare"
+          :selected="selected ?? false"
+          :disabled="layout.loading || navigating"
+          @toggle="emit('toggle-selection')"
+        />
+      </template>
     </header-bar>
     <div
       class="preview"
@@ -87,6 +83,12 @@
         </div>
       </gallery-stage>
     </div>
+    <gallery-quality-button
+      v-if="showControls && file.type === 'image' && file.allowImagePreview"
+      :original="effectiveOriginal"
+      :disabled="layout.loading || navigating"
+      @toggle="toggleQuality"
+    />
     <button
       :class="{ hidden: !previous || !showControls }"
       :disabled="navigating || layout.loading"
@@ -195,6 +197,7 @@ const changingSlide = computed(
 function toggleQuality() {
   if (
     !layout.loading &&
+    !navigating.value &&
     props.file.type === "image" &&
     props.file.allowImagePreview &&
     !props.file.uploadOnly

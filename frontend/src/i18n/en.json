@@ -1,6 +1,7 @@
 {
   "buttons": {
     "originalQuality": "Show original image",
+    "hdQuality": "HD image quality",
     "previewQuality": "Show preview image",
     "cancel": "Cancel",
     "clear": "Clear",
