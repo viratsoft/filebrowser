@@ -9,6 +9,13 @@
     </div>
 
     <div class="card-content">
+      <p
+        v-if="layoutStore.currentPrompt?.props?.showSubfolderNote"
+        class="download-subfolder-note"
+      >
+        <i class="material-icons" aria-hidden="true">info_outline</i>
+        <span>{{ t("prompts.shareDownloadIncludesSubfolders") }}</span>
+      </p>
       <div
         v-if="calculateTotals"
         class="download-folder-details"
@@ -288,6 +295,23 @@ onDeactivated(cancel);
 .download-hint {
   margin: 0 0 0.9rem;
   color: var(--textSecondary);
+}
+.download-subfolder-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--borderPrimary);
+  border-radius: 0.45rem;
+  background: var(--surfaceSecondary);
+  color: var(--textPrimary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+.download-subfolder-note .material-icons {
+  color: var(--dark-blue);
+  font-size: 1.125rem;
 }
 .download-option {
   box-sizing: border-box;

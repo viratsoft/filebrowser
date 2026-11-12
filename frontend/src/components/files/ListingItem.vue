@@ -49,6 +49,7 @@
         <time :datetime="modified">{{ humanTime() }}</time>
       </p>
     </div>
+    <slot name="trailing-action" />
   </div>
 </template>
 
