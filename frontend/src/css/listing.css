@@ -434,3 +434,59 @@ html[dir="rtl"] #listing {
     min-width: 0;
   }
 }
+
+#listing.responsive-listing.list .item > .listing-details {
+  flex: 1;
+  min-width: 0;
+}
+
+#listing.responsive-listing.list .file-page-link {
+  display: grid;
+  flex: 0 0 2.75rem;
+  min-height: 2.75rem;
+  place-items: center;
+  margin-inline-start: 0.25rem;
+  border-radius: 0.4rem;
+  color: var(--action);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#listing.responsive-listing.list .file-page-link .material-icons {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+#listing.responsive-listing.list .file-page-link:focus-visible,
+#listing.responsive-listing.list .file-page-link:active {
+  background: var(--file-page-link-highlight, var(--surfaceSecondary));
+  color: var(--textPrimary);
+}
+
+#listing.responsive-listing.list .item[aria-selected="true"] .file-page-link {
+  --file-page-link-highlight: rgb(0 0 0 / 16%);
+  color: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #listing.responsive-listing.list .file-page-link:hover {
+    background: var(--file-page-link-highlight, var(--surfaceSecondary));
+    color: var(--textPrimary);
+  }
+}
+
+.file-page-link:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+html[dir="rtl"] .file-page-link .material-icons {
+  transform: scaleX(-1);
+}
+
+@media (min-width: 737px) {
+  #listing.responsive-listing.list
+    .item[data-dir]:not(:has(> .file-page-link)) {
+    padding-inline-end: 4rem;
+  }
+}

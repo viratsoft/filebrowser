@@ -24,6 +24,12 @@
         :disabled="layout.loading || navigating"
         @toggle="toggleQuality"
       />
+      <gallery-selection-button
+        v-if="!singleFileShare"
+        :selected="selected ?? false"
+        :disabled="layout.loading || navigating"
+        @toggle="emit('toggle-selection')"
+      />
       <a
         v-if="downloadURL"
         class="action"
@@ -115,15 +121,18 @@ import GallerySpinner from "./GallerySpinner.vue";
 import GalleryStage from "./GalleryStage.vue";
 import GalleryTitle from "./GalleryTitle.vue";
 import GalleryQualityButton from "./GalleryQualityButton.vue";
+import GallerySelectionButton from "./GallerySelectionButton.vue";
 
 const props = defineProps<{
   file: Resource;
   password: string;
   original: boolean;
+  selected?: boolean;
 }>();
 const emit = defineEmits<{
   (event: "close"): void;
   (event: "update:original", original: boolean): void;
+  (event: "toggle-selection"): void;
 }>();
 const router = useRouter();
 const layout = useLayoutStore();

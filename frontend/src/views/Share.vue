@@ -13,6 +13,8 @@
       :file="req"
       :password="password"
       v-model:original="originalImage"
+      :selected="fileStore.gallerySelection?.paths.includes(req.path) ?? false"
+      @toggle-selection="fileStore.toggleGallerySelection(route.path, req.path)"
       @close="closeGallery"
     />
     <header-bar showMenu showLogo>
@@ -244,35 +246,9 @@
                     ? api.getThumbnailURL(hash, item.path, item.modified, token)
                     : undefined
                 "
+                :show-file-page-link="viewMode === 'list'"
                 readOnly
-              >
-                <template
-                  v-if="
-                    viewMode === 'list' &&
-                    !fileStore.multiple &&
-                    !item.isDir &&
-                    (item.type === 'image' || item.type === 'video')
-                  "
-                  #trailing-action
-                >
-                  <router-link
-                    class="file-page-link"
-                    :to="{ path: item.url, query: { view: 'file' } }"
-                    :aria-label="t('buttons.openFilePage', { name: item.name })"
-                    :title="t('buttons.openFilePage', { name: item.name })"
-                    @click.stop
-                    @keydown.stop
-                    @mousedown.stop
-                    @touchstart.stop
-                    @touchend.stop
-                    @contextmenu.stop
-                  >
-                    <i class="material-icons" aria-hidden="true"
-                      >chevron_right</i
-                    >
-                  </router-link>
-                </template>
-              </item>
+              />
               <div
                 v-if="req.items.length > showLimit"
                 class="item"
@@ -495,6 +471,12 @@ const fetchData = async () => {
     token.value = file.token || "";
 
     fileStore.updateRequest(file);
+    if (fileStore.restoreGallerySelection(route.path)) {
+      const firstSelected = fileStore.selected[0];
+      if (firstSelected !== undefined) {
+        showLimit.value = Math.max(showLimit.value, firstSelected + 1);
+      }
+    }
     galleryClosed.value = route.query.view === "file";
     loadedShare.value = true;
     document.title = `${file.name} - ${t("buttons.share")} - ${appName}`;
@@ -712,6 +694,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   disposed = true;
+  fileStore.gallerySelection = null;
   fetchGeneration++;
   fetchController?.abort();
   // Destroyed
@@ -720,42 +703,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-#listing.list :deep(.shared-listing-item > .listing-details) {
-  flex: 1;
-  min-width: 0;
-}
-
-#listing.list .file-page-link {
-  display: grid;
-  flex: 0 0 2.75rem;
-  min-height: 2.75rem;
-  place-items: center;
-  margin-inline-start: 0.25rem;
-  border-radius: 0.4rem;
-  color: inherit;
-  text-decoration: none;
-}
-
-#listing.list .file-page-link .material-icons {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
-#listing.list .file-page-link:hover,
-#listing.list .file-page-link:focus-visible {
-  background: var(--surfaceSecondary);
-  color: var(--textPrimary);
-}
-
-.file-page-link:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: -2px;
-}
-
-html[dir="rtl"] .file-page-link .material-icons {
-  transform: scaleX(-1);
-}
-
 .share-folder-summary {
   padding-block: 0.45rem;
   word-break: normal;

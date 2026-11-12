@@ -23,6 +23,17 @@
         :original="fullSize"
         @toggle="toggleSize"
       />
+      <GallerySelectionButton
+        v-if="isGalleryMedia && fileStore.req"
+        :selected="
+          fileStore.gallerySelection?.paths.includes(fileStore.req.path) ??
+          false
+        "
+        :disabled="layoutStore.loading || navigationPending"
+        @toggle="
+          fileStore.toggleGallerySelection(route.path, fileStore.req.path)
+        "
+      />
 
       <template #actions>
         <action
@@ -240,6 +251,7 @@ import ExtendedImage from "@/components/files/ExtendedImage.vue";
 import GalleryStage from "@/components/files/GalleryStage.vue";
 import GalleryTitle from "@/components/files/GalleryTitle.vue";
 import GalleryQualityButton from "@/components/files/GalleryQualityButton.vue";
+import GallerySelectionButton from "@/components/files/GallerySelectionButton.vue";
 import VideoPlayer from "@/components/files/VideoPlayer.vue";
 import CsvViewer from "@/components/files/CsvViewer.vue";
 import { VueReader } from "vue-reader";

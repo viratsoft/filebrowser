@@ -39,6 +39,7 @@
     "select": "Select",
     "selectMultiple": "Select multiple",
     "selectAll": "Select all",
+    "selectGalleryFile": "Select this file",
     "deselectAll": "Deselect all",
     "share": "Share",
     "shell": "Toggle shell",

@@ -48,6 +48,9 @@ import { name } from "../utils/constants";
 
 const Editor = defineAsyncComponent(() => import("@/views/files/Editor.vue"));
 const Preview = defineAsyncComponent(() => import("@/views/files/Preview.vue"));
+const FileDetails = defineAsyncComponent(
+  () => import("@/views/files/FileDetails.vue")
+);
 
 const layoutStore = useLayoutStore();
 const fileStore = useFileStore();
@@ -69,6 +72,11 @@ const currentView = computed(() => {
 
   if (fileStore.req.isDir) {
     return FileListing;
+  } else if (
+    route.query.view === "file" &&
+    (fileStore.req.type === "image" || fileStore.req.type === "video")
+  ) {
+    return FileDetails;
   } else if (fileStore.req.extension.toLowerCase() === ".csv") {
     // CSV files use Preview for table view, unless ?edit=true
     if (route.query.edit === "true") {
@@ -98,6 +106,7 @@ onBeforeUnmount(() => {
 
 onUnmounted(() => {
   fileStore.isFiles = false;
+  fileStore.gallerySelection = null;
   if (layoutStore.showShell) {
     layoutStore.toggleShell();
   }
@@ -167,7 +176,7 @@ const fetchData = async () => {
     layoutStore.loading = false;
 
     // Selects the post-reload target item or the previously visited child folder
-    applyPreSelection();
+    if (!fileStore.restoreGallerySelection(route.path)) applyPreSelection();
   } catch (err) {
     if (
       controller.signal.aborted ||

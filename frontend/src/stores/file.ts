@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { removeLastDir } from "@/utils/url";
 
 export const useFileStore = defineStore("file", {
   // convert to a function
@@ -10,6 +11,7 @@ export const useFileStore = defineStore("file", {
     multiple: boolean;
     isFiles: boolean;
     preselect: string | null;
+    gallerySelection: { folder: string; paths: string[] } | null;
   } => ({
     req: null,
     oldReq: null,
@@ -18,6 +20,7 @@ export const useFileStore = defineStore("file", {
     multiple: false,
     isFiles: false,
     preselect: null,
+    gallerySelection: null,
   }),
   getters: {
     selectedCount: (state) => state.selected.length,
@@ -43,6 +46,44 @@ export const useFileStore = defineStore("file", {
     },
   },
   actions: {
+    toggleGallerySelection(routePath: string, filePath: string) {
+      const folder = removeLastDir(routePath);
+      const paths =
+        this.gallerySelection?.folder === folder
+          ? this.gallerySelection.paths
+          : [];
+      this.gallerySelection = {
+        folder,
+        paths: paths.includes(filePath)
+          ? paths.filter((path) => path !== filePath)
+          : [...paths, filePath],
+      };
+    },
+    restoreGallerySelection(routePath: string) {
+      const selection = this.gallerySelection;
+      const resource = this.req;
+      if (!selection || !resource) return false;
+      if (!resource.isDir) {
+        if (removeLastDir(routePath) !== selection.folder) {
+          this.gallerySelection = null;
+        }
+        return false;
+      }
+      this.gallerySelection = null;
+      if (
+        resource.uploadOnly ||
+        routePath.replace(/\/+$/, "") !== selection.folder
+      ) {
+        return false;
+      }
+      const paths = new Set(selection.paths);
+      this.selected = resource.items
+        .filter((item) => !item.isDir && paths.has(item.path))
+        .map((item) => item.index);
+      this.multiple = this.selected.length > 0;
+      this.preselect = null;
+      return true;
+    },
     // no context as first argument, use `this` instead
     toggleMultiple() {
       this.multiple = !this.multiple;
@@ -62,7 +103,7 @@ export const useFileStore = defineStore("file", {
         : this.req.items.map((_, index) => index);
     },
     updateRequest(value: Resource | null) {
-      const selectedItems = this.selected.map((i) => this.req?.items[i]);
+      const selectedItems = this.selected.map((i) => this.req?.items?.[i]);
       this.oldReq = this.req;
       this.req = value;
 

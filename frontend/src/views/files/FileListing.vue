@@ -256,8 +256,8 @@
             v-bind:type="item.type"
             v-bind:size="item.size"
             v-bind:path="item.path"
-          >
-          </item>
+            :show-file-page-link="authStore.user?.viewMode === 'list'"
+          />
         </div>
         <context-menu
           :show="isContextMenuVisible"
@@ -1083,12 +1083,27 @@ const revealPreviousItem = () => {
   const index = fileStore.selected[0];
   if (index === undefined) return;
 
-  showLimit.value =
-    index + Math.ceil((window.innerHeight * 2) / itemWeight.value);
+  const selected = fileStore.req.items[index];
+  if (!selected) return;
+  const group = selected.isDir ? items.value.dirs : items.value.files;
+  const groupPosition = group.findIndex((item) => item.index === index);
+  if (groupPosition < 0) return;
+  const position = selected.isDir
+    ? groupPosition
+    : items.value.dirs.length + groupPosition;
+  const buffer =
+    itemWeight.value > 0
+      ? Math.ceil((window.innerHeight * 2) / itemWeight.value)
+      : 0;
+  showLimit.value = Math.max(
+    showLimit.value,
+    Math.min(fileStore.req.items.length, position + 1 + buffer)
+  );
 
   nextTick(() => {
-    const items = document.querySelectorAll("#listing .item");
-    items[index].scrollIntoView({ block: "center" });
+    listing.value
+      ?.querySelector(`.item[data-index="${index}"]`)
+      ?.scrollIntoView({ block: "center" });
   });
 
   return true;

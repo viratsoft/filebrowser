@@ -10,6 +10,7 @@ function listing(count: number) {
     items: Array.from({ length: count }, (_, index) => ({
       index,
       name: `item-${index}`,
+      path: `/current/item-${index}`,
       url: `/files/current/item-${index}`,
       isDir: index % 2 === 0,
     })),
@@ -94,5 +95,45 @@ describe("select all in the current listing", () => {
     expect(store.allItemsSelected).toBe(false);
     expect(store.selected).toEqual([]);
     expect(store.multiple).toBe(false);
+  });
+});
+
+describe("restore slideshow selection", () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it.each(["/files/current", "/share/example/current"])(
+    "restores only checked files at their current listing indices for %s",
+    (folder) => {
+      const store = listing(4);
+      const directory = store.req!;
+      store.toggleGallerySelection(`${folder}/item-1`, "/current/item-1");
+      store.toggleGallerySelection(`${folder}/item-3`, "/current/item-3");
+      store.toggleGallerySelection(`${folder}/item-3`, "/current/item-3");
+      store.toggleGallerySelection(
+        `${folder}/missing.jpg`,
+        "/current/missing.jpg"
+      );
+      store.updateRequest({ isDir: false } as Resource);
+      expect(store.restoreGallerySelection(`${folder}/item-3`)).toBe(false);
+      store.updateRequest({
+        ...directory,
+        items: [...directory.items].reverse().map((item, index) => ({
+          ...item,
+          index,
+        })),
+      });
+      expect(store.restoreGallerySelection(`${folder}/`)).toBe(true);
+      expect(store.selected).toEqual([2]);
+      expect(store.multiple).toBe(true);
+      expect(store.gallerySelection).toBeNull();
+    }
+  );
+
+  it("discards slideshow selection when visiting another folder", () => {
+    const store = listing(4);
+    store.toggleGallerySelection("/files/current/item-1", "/current/item-1");
+    expect(store.restoreGallerySelection("/files/other/")).toBe(false);
+    expect(store.selected).toEqual([]);
+    expect(store.gallerySelection).toBeNull();
   });
 });

@@ -62,4 +62,10 @@ const sizeLabel = computed(() => {
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
+
+@media (max-width: 420px) {
+  .gallery-title {
+    padding-inline: 0.6rem;
+  }
+}
 </style>

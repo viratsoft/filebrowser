@@ -18,6 +18,7 @@
     @touchcancel="handleTouchCancel"
     @touchmove="handleTouchMove"
     :data-dir="isDir"
+    :data-index="index"
     :data-type="type"
     :aria-label="name"
     :aria-selected="isSelected"
@@ -49,7 +50,26 @@
         <time :datetime="modified">{{ humanTime() }}</time>
       </p>
     </div>
-    <slot name="trailing-action" />
+    <router-link
+      v-if="
+        showFilePageLink &&
+        !fileStore.multiple &&
+        !isDir &&
+        (type === 'image' || type === 'video')
+      "
+      class="file-page-link"
+      :to="{ path: url, query: { view: 'file' } }"
+      :aria-label="$t('buttons.openFilePage', { name })"
+      :title="$t('buttons.openFilePage', { name })"
+      @click.stop
+      @keydown.stop
+      @mousedown.stop
+      @touchstart.stop
+      @touchend.stop
+      @contextmenu.stop
+    >
+      <i class="material-icons" aria-hidden="true">chevron_right</i>
+    </router-link>
   </div>
 </template>
 
@@ -86,6 +106,7 @@ const props = defineProps<{
   modified: string;
   index: number;
   readOnly?: boolean;
+  showFilePageLink?: boolean;
   path?: string;
   publicThumbnailUrl?: string;
 }>();
