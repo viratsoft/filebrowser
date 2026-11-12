@@ -38,9 +38,15 @@
   #more {
     display: inherit;
   }
-  header .overlay {
-    width: 100%;
-    height: 100%;
+  header.overflow-open {
+    z-index: 1001;
+  }
+
+  header .overflow-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1;
     background-color: var(--borderPrimary);
   }
   #dropdown {
@@ -48,12 +54,19 @@
     top: 1em;
     right: 1em;
     display: block;
-    background: var(--surfaceSecondary);
-    box-shadow: 0 0 5px var(--borderPrimary);
+    max-width: calc(100% - 2em);
+    max-height: calc(100% - 2em);
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: var(--surfacePrimary);
+    border: 1px solid var(--borderPrimary);
+    border-radius: 0.65rem;
+    box-shadow: 0 4px 16px var(--borderSecondary);
     transform: scale(0);
     transition: 0.1s ease-in-out transform;
     transform-origin: top right;
-    z-index: 99999;
+    visibility: hidden;
+    z-index: 2;
   }
 
   html[dir="rtl"] #dropdown {
@@ -67,12 +80,14 @@
   }
   #dropdown.active {
     transform: scale(1);
+    visibility: visible;
   }
   #dropdown .action {
     display: flex;
     align-items: center;
     border-radius: 0;
     width: 100%;
+    min-height: 2.75rem;
   }
   #dropdown .action span:not(.counter) {
     display: inline-block;

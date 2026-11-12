@@ -493,3 +493,32 @@ html[dir="rtl"] .file-page-chevron {
     padding-inline-end: 4rem;
   }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .folder-list-enter,
+  .folder-list-return {
+    --folder-list-distance: min(0.75rem, 1.5%);
+    animation: folder-list-reveal 220ms cubic-bezier(0.2, 0.7, 0.25, 1);
+  }
+
+  .folder-list-enter,
+  [dir="rtl"] .folder-list-return {
+    --folder-list-offset: var(--folder-list-distance);
+  }
+
+  .folder-list-return,
+  [dir="rtl"] .folder-list-enter {
+    --folder-list-offset: calc(-1 * var(--folder-list-distance));
+  }
+
+  @keyframes folder-list-reveal {
+    from {
+      opacity: 0.72;
+      transform: translateX(var(--folder-list-offset)) scaleX(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

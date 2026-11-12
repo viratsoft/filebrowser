@@ -24,6 +24,28 @@ export const useFileStore = defineStore("file", {
   }),
   getters: {
     selectedCount: (state) => state.selected.length,
+    folderTransition: ({ req, oldReq }) => {
+      if (!req?.isDir || !req.url) return;
+      const current = req.url.replace(/\/+$/, "");
+      const previous = oldReq?.url?.replace(/\/+$/, "");
+      if (previous === current) return;
+      return previous?.startsWith(`${current}/`)
+        ? "folder-list-return"
+        : "folder-list-enter";
+    },
+    previousGalleryItemIndex: ({ req, oldReq }) => {
+      if (
+        !req?.isDir ||
+        req.uploadOnly ||
+        !oldReq?.url ||
+        oldReq.isDir ||
+        !["image", "video", "audio"].includes(oldReq.type) ||
+        removeLastDir(oldReq.url) !== req.url.replace(/\/+$/, "")
+      ) {
+        return undefined;
+      }
+      return req.items.find((item) => item.path === oldReq.path)?.index;
+    },
     allItemsSelected: (state) => {
       const items = state.req?.isDir ? state.req.items : [];
       if (!items?.length) return false;

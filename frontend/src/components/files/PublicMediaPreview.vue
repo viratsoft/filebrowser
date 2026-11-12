@@ -1,10 +1,12 @@
 <template>
   <div
     id="previewer"
+    class="media-gallery"
     :class="{ 'image-gallery': file.type === 'image' }"
     @touchmove.prevent.stop
     @wheel.prevent.stop
     @pointermove="revealVideoControls"
+    @contextmenu.capture.prevent.stop
   >
     <header-bar v-if="showControls" class="gallery-toolbar">
       <action
@@ -35,6 +37,7 @@
         <gallery-selection-button
           v-if="!singleFileShare"
           :selected="selected ?? false"
+          :count="selectedCount ?? 0"
           :disabled="layout.loading || navigating"
           @toggle="emit('toggle-selection')"
         />
@@ -115,6 +118,7 @@ import { useI18n } from "vue-i18n";
 import { pub as api } from "@/api";
 import { useLayoutStore } from "@/stores/layout";
 import url from "@/utils/url";
+import { consumeGallerySelectionShortcut } from "@/utils/gallery-keyboard";
 import HeaderBar from "@/components/header/HeaderBar.vue";
 import Action from "@/components/header/Action.vue";
 import ExtendedImage from "./ExtendedImage.vue";
@@ -130,6 +134,7 @@ const props = defineProps<{
   password: string;
   original: boolean;
   selected?: boolean;
+  selectedCount?: number;
 }>();
 const emit = defineEmits<{
   (event: "close"): void;
@@ -317,6 +322,18 @@ function revealVideoControls() {
 }
 function key(event: KeyboardEvent) {
   if (layout.currentPrompt !== null) return;
+  if (
+    props.file.type === "image" &&
+    !props.file.uploadOnly &&
+    !singleFileShare.value &&
+    !layout.loading &&
+    !navigating.value &&
+    consumeGallerySelectionShortcut(event)
+  ) {
+    showControls.value = true;
+    emit("toggle-selection");
+    return;
+  }
   if (event.key === "Escape") emit("close");
   else if (props.file.type !== "video" && event.key === "ArrowLeft")
     void go(previous.value);

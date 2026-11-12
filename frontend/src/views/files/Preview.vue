@@ -1,11 +1,15 @@
 <template>
   <div
     id="previewer"
-    :class="{ 'image-gallery': fileStore.req?.type === 'image' }"
+    :class="{
+      'image-gallery': fileStore.req?.type === 'image',
+      'media-gallery': isGalleryMedia,
+    }"
     @touchmove.prevent.stop
     @wheel.prevent.stop
     @mousemove="revealNavigation"
     @touchstart="revealNavigation"
+    @contextmenu.capture="blockGalleryContextMenu"
   >
     <header-bar
       v-if="isPdf || isEpub || isCsv || showNav"
@@ -74,10 +78,9 @@
             fileStore.gallerySelection?.paths.includes(fileStore.req.path) ??
             false
           "
+          :count="fileStore.gallerySelection?.paths.length ?? 0"
           :disabled="layoutStore.loading || navigationPending"
-          @toggle="
-            fileStore.toggleGallerySelection(route.path, fileStore.req.path)
-          "
+          @toggle="toggleSelection"
         />
       </template>
     </header-bar>
@@ -248,6 +251,7 @@ import { createURL } from "@/api/utils";
 import { resizePreview } from "@/utils/constants";
 import url from "@/utils/url";
 import { closeGalleryRoute } from "@/utils/gallery-history";
+import { consumeGallerySelectionShortcut } from "@/utils/gallery-keyboard";
 import { throttle } from "lodash-es";
 import HeaderBar from "@/components/header/HeaderBar.vue";
 import Action from "@/components/header/Action.vue";
@@ -500,8 +504,36 @@ const prev = () => navigateTo(previousLink.value);
 
 const next = () => navigateTo(nextLink.value);
 
+function toggleSelection() {
+  const file = fileStore.req;
+  if (
+    file &&
+    isGalleryMedia.value &&
+    !layoutStore.loading &&
+    !navigationPending.value
+  ) {
+    fileStore.toggleGallerySelection(route.path, file.path);
+  }
+}
+
+function blockGalleryContextMenu(event: MouseEvent) {
+  if (!isGalleryMedia.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 const key = (event: KeyboardEvent) => {
   if (layoutStore.currentPrompt !== null) {
+    return;
+  }
+  if (
+    fileStore.req?.type === "image" &&
+    !layoutStore.loading &&
+    !navigationPending.value &&
+    consumeGallerySelectionShortcut(event)
+  ) {
+    showNav.value = true;
+    toggleSelection();
     return;
   }
   // When previewing a video, let arrow keys fall through to video.js for

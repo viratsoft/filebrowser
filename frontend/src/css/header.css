@@ -27,9 +27,8 @@ header title {
   font-size: 1.2em;
 }
 
-header .overlay {
-  width: 0;
-  height: 0;
+header .overflow-backdrop {
+  display: none;
 }
 
 header a,

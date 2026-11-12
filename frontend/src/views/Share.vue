@@ -14,6 +14,7 @@
       :password="password"
       v-model:original="originalImage"
       :selected="fileStore.gallerySelection?.paths.includes(req.path) ?? false"
+      :selected-count="fileStore.gallerySelection?.paths.length ?? 0"
       @toggle-selection="fileStore.toggleGallerySelection(route.path, req.path)"
       @close="closeGallery"
     />
@@ -206,6 +207,7 @@
         </div>
         <div
           id="shareList"
+          ref="shareList"
           v-if="req.isDir && req.items.length > 0"
           class="share__box share__box__items"
         >
@@ -230,7 +232,7 @@
             class="file-icons responsive-listing"
             :class="viewMode"
           >
-            <div>
+            <div :class="fileStore.folderTransition">
               <item
                 v-for="item in req.items.slice(0, showLimit)"
                 :key="base64(item.name)"
@@ -310,6 +312,7 @@
         <div
           v-else-if="req.isDir && req.items.length === 0"
           class="share__box share__box__items"
+          :class="fileStore.folderTransition"
         >
           <h2 class="message">
             <i class="material-icons">sentiment_dissatisfied</i>
@@ -341,7 +344,15 @@ import { closeGalleryRoute } from "@/utils/gallery-history";
 import { name as appName } from "@/utils/constants";
 import { useFileStore } from "@/stores/file";
 import { useLayoutStore } from "@/stores/layout";
-import { computed, inject, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import {
+  computed,
+  inject,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  watch,
+} from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { StatusError } from "@/api/utils";
@@ -355,6 +366,7 @@ const attemptedPasswordLogin = ref<boolean>(false);
 const hash = ref<string>("");
 const token = ref<string>("");
 const uploadInput = ref<HTMLInputElement>();
+const shareList = ref<HTMLElement>();
 const originalImage = ref(false);
 const viewMode = ref<ViewModeType>("list");
 const galleryClosed = ref(false);
@@ -472,10 +484,18 @@ const fetchData = async () => {
     token.value = file.token || "";
 
     fileStore.updateRequest(file);
-    if (fileStore.restoreGallerySelection(route.path)) {
-      const firstSelected = fileStore.selected[0];
-      if (firstSelected !== undefined) {
-        showLimit.value = Math.max(showLimit.value, firstSelected + 1);
+    fileStore.restoreGallerySelection(route.path);
+    const previousIndex = fileStore.previousGalleryItemIndex;
+    const revealIndex = previousIndex ?? fileStore.selected[0];
+    if (revealIndex !== undefined) {
+      showLimit.value = Math.max(showLimit.value, revealIndex + 1);
+      if (previousIndex !== undefined) {
+        void nextTick(() => {
+          if (disposed || generation !== fetchGeneration) return;
+          shareList.value
+            ?.querySelector(`.item[data-index="${previousIndex}"]`)
+            ?.scrollIntoView({ block: "center", inline: "nearest" });
+        });
       }
     }
     galleryClosed.value = route.query.view === "file";

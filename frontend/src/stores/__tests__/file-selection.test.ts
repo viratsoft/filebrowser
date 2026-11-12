@@ -7,6 +7,7 @@ function listing(count: number) {
   store.isFiles = true;
   store.req = {
     isDir: true,
+    url: "/files/current/",
     items: Array.from({ length: count }, (_, index) => ({
       index,
       name: `item-${index}`,
@@ -135,5 +136,31 @@ describe("restore slideshow selection", () => {
     expect(store.restoreGallerySelection("/files/other/")).toBe(false);
     expect(store.selected).toEqual([]);
     expect(store.gallerySelection).toBeNull();
+  });
+
+  it("reveals the last viewed file independently of the checked files", () => {
+    const store = listing(4);
+    store.oldReq = {
+      isDir: false,
+      type: "image",
+      path: "/current/item-3",
+      url: "/files/current/item-3",
+    } as Resource;
+    store.selected = [1];
+    expect(store.previousGalleryItemIndex).toBe(3);
+    expect(store.selected).toEqual([1]);
+    store.oldReq.url = "/share/another/current/item-3";
+    expect(store.previousGalleryItemIndex).toBeUndefined();
+  });
+
+  it("animates folder entry and return without replaying on a refresh", () => {
+    const store = listing(2);
+    const directory = store.req!;
+    store.updateRequest({ ...directory, url: "/files/current/sub/" });
+    expect(store.folderTransition).toBe("folder-list-enter");
+    store.updateRequest(directory);
+    expect(store.folderTransition).toBe("folder-list-return");
+    store.updateRequest({ ...directory, url: "/files/current" });
+    expect(store.folderTransition).toBeUndefined();
   });
 });

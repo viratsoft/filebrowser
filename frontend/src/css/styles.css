@@ -190,6 +190,10 @@ main .spinner .bounce2 {
   column-gap: clamp(0.25rem, 1.5vw, 0.5rem);
 }
 
+#previewer.media-gallery {
+  -webkit-touch-callout: none;
+}
+
 #previewer .gallery-toolbar > .action {
   min-width: 2.75rem;
   min-height: 2.75rem;

@@ -2,6 +2,8 @@
   "buttons": {
     "originalQuality": "Show original image",
     "hdQuality": "HD image quality",
+    "currentOriginalQuality": "Original quality",
+    "currentPreviewQuality": "Preview quality",
     "previewQuality": "Show preview image",
     "cancel": "Cancel",
     "clear": "Clear",
@@ -41,6 +43,7 @@
     "selectMultiple": "Select multiple",
     "selectAll": "Select all",
     "selectGalleryFile": "Select this file",
+    "gallerySelectionCount": "{count} file selected | {count} files selected",
     "deselectAll": "Deselect all",
     "share": "Share",
     "shell": "Toggle shell",

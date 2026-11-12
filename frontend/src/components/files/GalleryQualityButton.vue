@@ -24,7 +24,11 @@ const props = defineProps<{ original: boolean; disabled: boolean }>();
 const emit = defineEmits<{ (event: "toggle"): void }>();
 const { t } = useI18n();
 const label = computed(() =>
-  t(props.original ? "buttons.previewQuality" : "buttons.originalQuality")
+  t(
+    props.original
+      ? "buttons.currentOriginalQuality"
+      : "buttons.currentPreviewQuality"
+  )
 );
 </script>
 

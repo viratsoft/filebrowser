@@ -4,17 +4,34 @@
     class="action gallery-select"
     :disabled="disabled"
     :aria-pressed="selected"
-    :aria-label="$t('buttons.selectGalleryFile')"
-    :title="$t('buttons.selectGalleryFile')"
+    :aria-label="label"
+    :title="label"
     @click="emit('toggle')"
   >
     <span class="gallery-select-circle" aria-hidden="true"></span>
+    <span v-if="count > 0" class="gallery-select-count" aria-hidden="true">
+      {{ count > 99 ? `${n(99)}+` : n(count) }}
+    </span>
   </button>
 </template>
 
 <script setup lang="ts">
-defineProps<{ selected: boolean; disabled: boolean }>();
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+
+const props = defineProps<{
+  selected: boolean;
+  disabled: boolean;
+  count: number;
+}>();
 const emit = defineEmits<{ (event: "toggle"): void }>();
+const { t, n } = useI18n();
+const label = computed(() => {
+  const action = t("buttons.selectGalleryFile");
+  return props.count > 0
+    ? `${action}. ${t("buttons.gallerySelectionCount", { count: n(props.count) }, props.count)}`
+    : action;
+});
 </script>
 
 <style scoped>
@@ -72,6 +89,27 @@ const emit = defineEmits<{ (event: "toggle"): void }>();
 .gallery-select:focus-visible {
   outline: 2px solid #fff;
   outline-offset: -3px;
+}
+
+#previewer .gallery-select .gallery-select-count {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-width: 0.95rem;
+  height: 0.95rem;
+  padding-inline: 0.15rem;
+  border: 1px solid #101010;
+  border-radius: 999px;
+  background: #1769c2;
+  color: #fff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 @media (hover: none) {

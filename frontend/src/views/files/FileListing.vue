@@ -140,6 +140,7 @@
         v-if="
           (fileStore.req?.numDirs ?? 0) + (fileStore.req?.numFiles ?? 0) == 0
         "
+        :class="fileStore.folderTransition"
       >
         <h2 class="message">
           <i class="material-icons">sentiment_dissatisfied</i>
@@ -219,6 +220,7 @@
         </h2>
         <div
           v-if="fileStore.req?.numDirs ?? false"
+          :class="fileStore.folderTransition"
           data-clear-on-click="true"
           @contextmenu="showContextMenu"
         >
@@ -242,6 +244,7 @@
         </h2>
         <div
           v-if="fileStore.req?.numFiles ?? false"
+          :class="fileStore.folderTransition"
           data-clear-on-click="true"
           @contextmenu="showContextMenu"
         >
@@ -1080,7 +1083,7 @@ const fillWindow = (fit = false) => {
 const revealPreviousItem = () => {
   if (!fileStore.req || !fileStore.oldReq) return;
 
-  const index = fileStore.selected[0];
+  const index = fileStore.previousGalleryItemIndex ?? fileStore.selected[0];
   if (index === undefined) return;
 
   const selected = fileStore.req.items[index];

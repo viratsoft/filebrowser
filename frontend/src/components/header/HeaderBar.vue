@@ -1,5 +1,7 @@
 <template>
-  <header>
+  <header
+    :class="{ 'overflow-open': layoutStore.currentPromptName === 'more' }"
+  >
     <img v-if="showLogo" :src="logoURL" alt="File Browser" />
     <Action
       v-if="showMenu"
@@ -29,7 +31,8 @@
     <slot name="trailing" />
 
     <div
-      class="overlay"
+      class="overflow-backdrop"
+      aria-hidden="true"
       v-show="layoutStore.currentPromptName == 'more'"
       @click="layoutStore.closeHovers"
     />
