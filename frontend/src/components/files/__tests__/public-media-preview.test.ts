@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import PublicMediaPreview from "../PublicMediaPreview.vue";
 
 const harness = vi.hoisted(() => ({
+  mount: [] as Array<() => void>,
   unmount: [] as Array<() => void>,
   fetch: vi.fn(),
   fetchImage: vi.fn(),
@@ -13,7 +14,7 @@ vi.mock("vue", async (original) => ({
   ...(await original<typeof import("vue")>()),
   useSSRContext: () => ({ modules: new Set<string>() }),
   inject: () => vi.fn(),
-  onMounted: vi.fn(),
+  onMounted: (callback: () => void) => harness.mount.push(callback),
   onBeforeUnmount: (callback: () => void) => harness.unmount.push(callback),
 }));
 vi.mock("vue-router", async (original) => ({
@@ -59,6 +60,7 @@ async function setup(password = "") {
 }
 beforeEach(() => {
   scope = effectScope();
+  harness.mount.length = 0;
   harness.unmount.length = 0;
   harness.fetch.mockReset();
   harness.fetchImage.mockReset();
@@ -69,7 +71,10 @@ beforeEach(() => {
   });
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:private-preview");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-  vi.stubGlobal("window", { removeEventListener: vi.fn() });
+  vi.stubGlobal("window", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
 });
 afterEach(() => {
   for (const callback of harness.unmount.splice(0)) callback();
@@ -79,6 +84,24 @@ afterEach(() => {
 });
 
 describe("public gallery navigation and quality", () => {
+  it("locks background scrolling for the viewer lifetime", async () => {
+    const classList = new Set(["dark"]);
+    vi.stubGlobal("document", {
+      documentElement: {
+        classList: {
+          add: (name: string) => classList.add(name),
+          remove: (name: string) => classList.delete(name),
+        },
+      },
+    });
+    await setup();
+    expect(classList.has("share-gallery-open")).toBe(false);
+    for (const callback of harness.mount.splice(0)) callback();
+    expect(classList.has("share-gallery-open")).toBe(true);
+    for (const callback of harness.unmount.splice(0)) callback();
+    expect([...classList]).toEqual(["dark"]);
+  });
+
   it("returns directly to the folder on Back after multiple slides", async () => {
     const folder = "/share/hash/";
     const second: Resource = { ...photo("b.mp4"), type: "video" };

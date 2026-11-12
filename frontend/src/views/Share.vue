@@ -236,6 +236,10 @@
               <item
                 v-for="item in req.items.slice(0, showLimit)"
                 :key="base64(item.name)"
+                :class="{
+                  'gallery-return-highlight':
+                    item.index === fileStore.previousGalleryItemIndex,
+                }"
                 v-bind:index="item.index"
                 v-bind:name="item.name"
                 v-bind:isDir="item.isDir"

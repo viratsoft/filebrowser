@@ -178,6 +178,10 @@ main .spinner .bounce2 {
   overflow: hidden;
 }
 
+html.share-gallery-open {
+  overflow: hidden;
+}
+
 #previewer header {
   background: none;
   color: #fff;

@@ -160,6 +160,7 @@ let imageController: AbortController | null = null;
 let objectURL = "";
 let controlsTimer: ReturnType<typeof setTimeout> | null = null;
 let disposed = false;
+let scrollRoot: HTMLElement | undefined;
 
 const effectiveOriginal = computed(
   () => props.original || !props.file.allowImagePreview
@@ -384,8 +385,14 @@ watch(
     if (!loading) pendingPath.value = "";
   }
 );
-onMounted(() => window.addEventListener("keydown", key));
+onMounted(() => {
+  // The share page remains mounted behind the fixed viewer.
+  scrollRoot = document.documentElement;
+  scrollRoot.classList.add("share-gallery-open");
+  window.addEventListener("keydown", key);
+});
 onBeforeUnmount(() => {
+  scrollRoot?.classList.remove("share-gallery-open");
   disposed = true;
   listingRequest++;
   imageRequest++;

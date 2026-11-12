@@ -251,6 +251,10 @@
           <item
             v-for="item in files"
             :key="base64(item.name)"
+            :class="{
+              'gallery-return-highlight':
+                item.index === fileStore.previousGalleryItemIndex,
+            }"
             v-bind:index="item.index"
             v-bind:name="item.name"
             v-bind:isDir="item.isDir"
@@ -1106,7 +1110,7 @@ const revealPreviousItem = () => {
   nextTick(() => {
     listing.value
       ?.querySelector(`.item[data-index="${index}"]`)
-      ?.scrollIntoView({ block: "center" });
+      ?.scrollIntoView({ block: "center", inline: "nearest" });
   });
 
   return true;
