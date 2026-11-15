@@ -168,10 +168,6 @@
     margin-right: unset;
   }
 
-  html[dir="rtl"] .breadcrumbs {
-    transform: translateX(16em);
-  }
-
   html[dir="rtl"] #nav .wrapper {
     margin-right: unset;
   }

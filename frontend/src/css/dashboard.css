@@ -229,7 +229,24 @@ body.rtl .card .card-action {
 
 .card .card-content.full {
   padding-bottom: 0;
-  overflow: auto;
+  padding-inline: 0;
+}
+
+.card-content.full table {
+  margin: 0;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 736px) {
+  .card-content.full :is(th, td) {
+    padding-inline: 0.35rem;
+    vertical-align: top;
+  }
+
+  .card-content.full .action i {
+    padding-inline: 0.2em;
+  }
 }
 
 .card h2 {

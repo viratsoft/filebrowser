@@ -1,3 +1,8 @@
+html {
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
 body {
   font-family: "Roboto", sans-serif;
   padding-top: 4em;
@@ -55,6 +60,9 @@ nav {
   width: 16em;
   position: fixed;
   top: 4em;
+  min-width: 0;
+  max-width: 100%;
+  gap: 0.2rem;
   left: 0;
   height: calc(100vh - 4em);
   overflow-x: hidden;
@@ -117,16 +125,73 @@ main {
   border-radius: 0.125em;
 }
 
-html[dir="rtl"] .breadcrumbs a {
-  transform: translateX(-16em);
+.breadcrumb-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.breadcrumb-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.breadcrumb-track {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  width: max-content;
+  min-width: 100%;
+  min-height: 2rem;
+}
+
+.breadcrumb-track > *,
+.breadcrumbs .chevron {
+  flex: none;
+}
+
+.breadcrumbs::before,
+.breadcrumbs::after {
+  position: absolute;
+  pointer-events: none;
+  inset-block: 0;
+  width: 1.15rem;
+  z-index: 1;
+}
+
+.breadcrumbs.fade-left::before {
+  content: "";
+  left: 0;
+  background: linear-gradient(to right, var(--background) 12%, transparent);
+}
+
+.breadcrumbs.fade-right::after {
+  content: "";
+  right: 0;
+  background: linear-gradient(to left, var(--background) 12%, transparent);
+}
+
+.breadcrumbs .breadcrumb-label {
+  display: block;
+  padding: 0.2em;
+  white-space: nowrap;
+}
+
+.breadcrumbs .breadcrumb-label[aria-current="location"] {
+  color: var(--textSecondary);
+  font-weight: 500;
+}
+
+.breadcrumbs a:focus-visible,
+.breadcrumb-scroll:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
 }
 
 .breadcrumbs a:hover {
   background-color: var(--divider);
-}
-
-.breadcrumbs span a {
-  padding: 0.2em;
 }
 
 .files {

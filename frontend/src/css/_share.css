@@ -58,6 +58,8 @@
 .share__box__items {
   text-align: left;
   flex: 10 0 25em;
+  min-width: 0;
+  max-width: calc(100% - 10px);
 }
 
 .share__box__items #listing.list .item {
