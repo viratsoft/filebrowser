@@ -8,7 +8,6 @@
 defineProps<{
   message: string;
 }>();
-
 </script>
 
 <style scoped>

@@ -82,7 +82,7 @@ app.provide("$showSuccess", (message: string) => {
 
 app.provide(
   "$showError",
-  (error: Error | string, _displayReport = true, toastClassName?: string) => {
+  (...[error, , toastClassName]: Parameters<IToastError>) => {
     const $toast = useToast();
     $toast.error(
       {
