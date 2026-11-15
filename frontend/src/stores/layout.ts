@@ -36,6 +36,13 @@ export const useLayoutStore = defineStore("layout", {
       }
     },
     showHover(value: PopupProps | string) {
+      if (
+        this.currentPromptName === "sidebar" ||
+        this.currentPromptName === "more"
+      ) {
+        this.closeHovers();
+      }
+
       if (typeof value !== "object") {
         this.prompts.push({
           prompt: value,

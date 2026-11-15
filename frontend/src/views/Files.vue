@@ -26,7 +26,6 @@
 import {
   computed,
   defineAsyncComponent,
-  onBeforeUnmount,
   onMounted,
   onUnmounted,
   ref,
@@ -97,11 +96,6 @@ const currentView = computed(() => {
 onMounted(() => {
   fetchData();
   fileStore.isFiles = true;
-  window.addEventListener("keydown", keyEvent);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener("keydown", keyEvent);
 });
 
 onUnmounted(() => {
@@ -189,12 +183,6 @@ const fetchData = async () => {
       error.value = err;
     }
     layoutStore.loading = false;
-  }
-};
-const keyEvent = (event: KeyboardEvent) => {
-  if (event.key === "F1") {
-    event.preventDefault();
-    layoutStore.showHover("help");
   }
 };
 </script>
