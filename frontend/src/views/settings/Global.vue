@@ -61,29 +61,6 @@
 
           <h3>{{ t("settings.branding") }}</h3>
 
-          <i18n-t
-            keypath="settings.brandingHelp"
-            tag="p"
-            class="small"
-            scope="global"
-          >
-            <a
-              class="link"
-              target="_blank"
-              href="https://github.com/filebrowser/filebrowser/blob/master/docs/customization.md#custom-branding"
-              >{{ t("settings.documentation") }}</a
-            >
-          </i18n-t>
-
-          <p>
-            <input
-              type="checkbox"
-              v-model="settings.branding.disableExternal"
-              id="branding-links"
-            />
-            {{ t("settings.disableExternalLinks") }}
-          </p>
-
           <p>
             <input
               type="checkbox"
@@ -199,19 +176,13 @@
 
         <div class="card-content">
           <i18n-t
-            keypath="settings.commandRunnerHelp"
+            keypath="settings.commandRunnerUsage"
             tag="p"
             class="small"
             scope="global"
           >
             <code>FILE</code>
             <code>SCOPE</code>
-            <a
-              class="link"
-              target="_blank"
-              href="https://github.com/filebrowser/filebrowser/blob/master/docs/command-execution.md#hook-runner"
-              >{{ t("settings.documentation") }}</a
-            >
           </i18n-t>
 
           <div

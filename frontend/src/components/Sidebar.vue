@@ -95,22 +95,7 @@
       {{ $t("sidebar.diskUsed", { used: usage.used, total: usage.total }) }}
     </div>
 
-    <p class="credits">
-      <span>
-        <span v-if="disableExternal">File Browser</span>
-        <a
-          v-else
-          rel="noopener noreferrer"
-          target="_blank"
-          href="https://github.com/filebrowser/filebrowser"
-          >File Browser</a
-        >
-        <span> {{ " " }} {{ version }}</span>
-      </span>
-      <span>
-        <a @click="help">{{ $t("sidebar.help") }}</a>
-      </span>
-    </p>
+    <p class="credits">File Browser {{ version }}</p>
   </nav>
 </template>
 
@@ -126,7 +111,6 @@ import {
   version,
   signup,
   hideLoginButton,
-  disableExternal,
   disableUsedPercentage,
   noAuth,
   logoutPage,
@@ -158,12 +142,11 @@ export default {
     signup: () => signup,
     hideLoginButton: () => hideLoginButton,
     version: () => version,
-    disableExternal: () => disableExternal,
     disableUsedPercentage: () => disableUsedPercentage,
     canLogout: () => !noAuth && (loginPage || logoutPage !== "/login"),
     // A share link is its own public surface, even when it is opened in a
     // browser that also has an authenticated FileBrowser session. Keep the
-    // sidebar shell (credits/help) for the existing share layout, but never
+    // sidebar credits for the existing share layout, but never
     // expose account navigation or file-management actions on that route.
     isShareRoute() {
       return this.$route.name === "Share";
@@ -212,9 +195,6 @@ export default {
     toGlobalSettings() {
       this.$router.push({ path: "/settings/global" });
       this.closeHovers();
-    },
-    help() {
-      this.showHover("help");
     },
     logout: auth.logout,
   },

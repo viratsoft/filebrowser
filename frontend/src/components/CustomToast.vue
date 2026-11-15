@@ -1,22 +1,14 @@
 <template>
   <div class="t-container">
     <span class="toast-message" :title="message">{{ message }}</span>
-    <button v-if="isReport" class="action" @click.stop="clicked">
-      {{ reportText }}
-    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 defineProps<{
   message: string;
-  reportText?: string;
-  isReport?: boolean;
 }>();
 
-const clicked = () => {
-  window.open("https://github.com/filebrowser/filebrowser/issues/new/choose");
-};
 </script>
 
 <style scoped>
@@ -39,22 +31,6 @@ const clicked = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.action {
-  text-align: center;
-  height: 40px;
-  padding: 0 10px;
-  margin-left: 20px;
-  border-radius: 5px;
-  color: white;
-  cursor: pointer;
-  border: thin solid currentColor;
-}
-
-html[dir="rtl"] .action {
-  margin-left: initial;
-  margin-right: 20px;
-}
-
 :global(.Vue-Toastification__toast.compact-conflict-toast) {
   border-radius: 8px;
   box-sizing: border-box;

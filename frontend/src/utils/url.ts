@@ -35,6 +35,14 @@ export function encodePath(str: string) {
     .join("/");
 }
 
+export function decodePathSegment(segment: string) {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export default {
   encodeRFC5987ValueChars,
   removeLastDir,

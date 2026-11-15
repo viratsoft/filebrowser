@@ -21,7 +21,7 @@
 import { ref, computed, watch, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { useFileStore } from "@/stores/file";
-import url from "@/utils/url";
+import { decodePathSegment, removeLastDir } from "@/utils/url";
 
 const fileStore = useFileStore();
 const route = useRoute();
@@ -44,13 +44,15 @@ const props = defineProps({
 const container = ref<HTMLElement | null>(null);
 
 const path = computed(() => {
-  const routePath = props.path || route.path;
-  let basePath = fileStore.isFiles ? routePath : url.removeLastDir(routePath);
-  if (!basePath.endsWith("/")) {
-    basePath += "/";
-  }
-  basePath += props.name;
-  return basePath.split("/").filter(Boolean).splice(1);
+  const routePath = props.path || (fileStore.isFiles ? route.path : "/");
+  const basePath = fileStore.isListing ? routePath : removeLastDir(routePath);
+  const parts = basePath
+    .split("/")
+    .filter(Boolean)
+    .slice(1)
+    .map(decodePathSegment);
+  if (props.name) parts.push(props.name);
+  return parts;
 });
 
 watch(path, () => {

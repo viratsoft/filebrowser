@@ -59,6 +59,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
+import { decodePathSegment } from "@/utils/url";
 
 const { t, locale } = useI18n();
 
@@ -175,13 +176,7 @@ const items = computed(() => {
     .filter(Boolean)
     .map((part) => {
       url += `${part}/`;
-      let name = part;
-      try {
-        name = decodeURIComponent(part);
-      } catch {
-        // Keep malformed escapes visible without breaking the whole path.
-      }
-      return { name, url };
+      return { name: decodePathSegment(part), url };
     });
 });
 
