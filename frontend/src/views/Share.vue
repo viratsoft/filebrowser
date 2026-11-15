@@ -13,6 +13,7 @@
       :file="req"
       :password="password"
       v-model:original="originalImage"
+      :sorting="sorting"
       :selected="fileStore.gallerySelection?.paths.includes(req.path) ?? false"
       :selected-count="fileStore.gallerySelection?.paths.length ?? 0"
       @toggle-selection="fileStore.toggleGallerySelection(route.path, req.path)"
@@ -232,6 +233,35 @@
             class="file-icons responsive-listing"
             :class="viewMode"
           >
+            <div v-if="viewMode === 'list'" class="share-sort-row">
+              <button
+                v-for="column in sortColumns"
+                :key="column.by"
+                type="button"
+                class="share-sort-button"
+                :title="t(column.label)"
+                :aria-label="
+                  sorting.by === column.by
+                    ? t(
+                        sorting.asc
+                          ? 'files.sortedAscending'
+                          : 'files.sortedDescending',
+                        { column: t(column.text) }
+                      )
+                    : undefined
+                "
+                :aria-pressed="sorting.by === column.by"
+                @click="sortShare(column.by)"
+              >
+                <span>{{ t(column.text) }}</span>
+                <i
+                  v-if="sorting.by === column.by"
+                  class="material-icons"
+                  aria-hidden="true"
+                  >{{ sorting.asc ? "arrow_upward" : "arrow_downward" }}</i
+                >
+              </button>
+            </div>
             <div :class="fileStore.folderTransition">
               <item
                 v-for="item in req.items.slice(0, showLimit)"
@@ -345,6 +375,11 @@ import PublicMediaPreview from "@/components/files/PublicMediaPreview.vue";
 import ShareFolderSize from "@/components/files/ShareFolderSize.vue";
 import urlUtils from "@/utils/url";
 import { closeGalleryRoute } from "@/utils/gallery-history";
+import {
+  sortShareItems,
+  type ShareSort,
+  type ShareSortField,
+} from "@/utils/share-sort";
 import { name as appName } from "@/utils/constants";
 import { useFileStore } from "@/stores/file";
 import { useLayoutStore } from "@/stores/layout";
@@ -365,6 +400,16 @@ import { useUploadStore } from "@/stores/upload";
 
 const error = ref<StatusError | null>(null);
 const showLimit = ref<number>(100);
+const sorting = ref<ShareSort>({ by: "name", asc: true });
+const sortColumns = [
+  { by: "name", text: "files.name", label: "files.sortByName" },
+  { by: "size", text: "files.size", label: "files.sortBySize" },
+  {
+    by: "modified",
+    text: "files.lastModified",
+    label: "files.sortByLastModified",
+  },
+] as const;
 const password = ref<string>("");
 const attemptedPasswordLogin = ref<boolean>(false);
 const hash = ref<string>("");
@@ -397,6 +442,16 @@ watch(route, () => {
 
 const req = computed(() => fileStore.req);
 const isUploadOnly = computed(() => Boolean(req.value?.uploadOnly));
+
+function sortShare(by: ShareSortField) {
+  const folder = req.value;
+  if (!folder?.isDir || folder.uploadOnly || layoutStore.loading) return;
+  sorting.value = { by, asc: sorting.value.by !== by || !sorting.value.asc };
+  fileStore.updateRequest({
+    ...folder,
+    items: sortShareItems(folder.items, sorting.value),
+  });
+}
 const canSwitchView = computed(
   () =>
     loadedShare.value &&
@@ -487,6 +542,9 @@ const fetchData = async () => {
 
     token.value = file.token || "";
 
+    if (file.isDir && !file.uploadOnly) {
+      file.items = sortShareItems(file.items, sorting.value);
+    }
     fileStore.updateRequest(file);
     fileStore.restoreGallerySelection(route.path);
     const previousIndex = fileStore.previousGalleryItemIndex;
@@ -728,6 +786,49 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+#listing > .share-sort-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  padding-inline: 0.5rem;
+  background: var(--background);
+}
+
+@media (max-width: 736px) {
+  #listing > .share-sort-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.75fr) minmax(0, 1.35fr);
+  }
+}
+
+.share-sort-button {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--textPrimary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.share-sort-button[aria-pressed="true"] {
+  font-weight: 600;
+}
+
+.share-sort-button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+.share-sort-button .material-icons {
+  flex: none;
+  font-size: 1.2em;
+  vertical-align: middle;
+}
+
 .share-folder-summary {
   padding-block: 0.45rem;
   word-break: normal;

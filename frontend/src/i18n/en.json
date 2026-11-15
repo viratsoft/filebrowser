@@ -96,6 +96,8 @@
     "sortByLastModified": "Sort by last modified",
     "sortByName": "Sort by name",
     "sortBySize": "Sort by size",
+    "sortedAscending": "{column}, sorted ascending",
+    "sortedDescending": "{column}, sorted descending",
     "noPreview": "Preview is not available for this file.",
     "csvTooLarge": "CSV file is too large for preview (>5MB). Please download to view.",
     "csvLoadFailed": "Failed to load CSV file.",
