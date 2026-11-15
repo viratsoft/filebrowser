@@ -125,9 +125,24 @@ main {
   border-radius: 0.125em;
 }
 
-.breadcrumb-scroll {
+.breadcrumbs > .breadcrumb-home {
+  display: grid;
+  flex: 0 0 2.5rem;
+  place-items: center;
+  align-self: stretch;
+}
+
+html[dir="rtl"] .breadcrumbs > .breadcrumb-home {
+  order: 1;
+}
+
+.breadcrumb-window {
   flex: 1;
   min-width: 0;
+  position: relative;
+}
+
+.breadcrumb-scroll {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -152,8 +167,8 @@ main {
   flex: none;
 }
 
-.breadcrumbs::before,
-.breadcrumbs::after {
+.breadcrumb-window::before,
+.breadcrumb-window::after {
   position: absolute;
   pointer-events: none;
   inset-block: 0;
@@ -161,13 +176,13 @@ main {
   z-index: 1;
 }
 
-.breadcrumbs.fade-left::before {
+.breadcrumb-window.fade-left::before {
   content: "";
   left: 0;
   background: linear-gradient(to right, var(--background) 12%, transparent);
 }
 
-.breadcrumbs.fade-right::after {
+.breadcrumb-window.fade-right::after {
   content: "";
   right: 0;
   background: linear-gradient(to left, var(--background) 12%, transparent);
@@ -179,9 +194,12 @@ main {
   white-space: nowrap;
 }
 
-.breadcrumbs .breadcrumb-label[aria-current="location"] {
+.breadcrumbs a.breadcrumb-label {
   color: var(--textSecondary);
-  font-weight: 500;
+}
+
+.breadcrumbs .breadcrumb-label[aria-current="location"] {
+  color: var(--textPrimary);
 }
 
 .breadcrumbs a:focus-visible,

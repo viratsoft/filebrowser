@@ -1,50 +1,55 @@
 <template>
-  <div
-    class="breadcrumbs"
-    :class="{ 'fade-left': hiddenLeft, 'fade-right': hiddenRight }"
-  >
-    <div
-      ref="viewport"
-      class="breadcrumb-scroll"
-      role="region"
-      :aria-label="t('settings.path')"
-      :tabindex="hiddenLeft || hiddenRight ? 0 : undefined"
-      @scroll.passive="updateEdges"
-      @wheel.passive="keepManualPosition"
-      @touchstart.passive="keepManualPosition"
-      @focusin="onPathFocus"
-      @keydown.self="scrollWithKeyboard"
+  <div class="breadcrumbs">
+    <component
+      :is="items.length === 0 ? 'span' : element"
+      class="breadcrumb-home"
+      v-bind="!noLink && items.length > 0 ? { to: base || '/' } : {}"
+      :aria-label="t('files.home')"
+      :title="t('files.home')"
+      :aria-current="items.length === 0 ? 'location' : undefined"
     >
-      <div ref="track" class="breadcrumb-track">
-        <component
-          :is="element"
-          class="breadcrumb-home"
-          :to="base || ''"
-          :aria-label="t('files.home')"
-          :title="t('files.home')"
-          :aria-current="items.length === 0 ? 'location' : undefined"
-        >
-          <i class="material-icons" aria-hidden="true">home</i>
-        </component>
-
-        <span
-          v-for="(link, index) in items"
-          :key="link.url"
-          class="breadcrumb-item"
-        >
-          <span class="chevron" aria-hidden="true"
-            ><i class="material-icons">keyboard_arrow_right</i></span
+      <i class="material-icons" aria-hidden="true">home</i>
+    </component>
+    <div
+      class="breadcrumb-window"
+      :class="{ 'fade-left': hiddenLeft, 'fade-right': hiddenRight }"
+    >
+      <div
+        ref="viewport"
+        class="breadcrumb-scroll"
+        role="region"
+        :aria-label="t('settings.path')"
+        :tabindex="hiddenLeft || hiddenRight ? 0 : undefined"
+        @scroll.passive="updateEdges"
+        @wheel.passive="keepManualPosition"
+        @touchstart.passive="keepManualPosition"
+        @focusin="onPathFocus"
+        @keydown.self="scrollWithKeyboard"
+      >
+        <div ref="track" class="breadcrumb-track">
+          <span
+            v-for="(link, index) in items"
+            :key="link.url"
+            class="breadcrumb-item"
           >
-          <component
-            :is="element"
-            class="breadcrumb-label"
-            :to="link.url"
-            :title="link.name"
-            :aria-current="index === items.length - 1 ? 'location' : undefined"
-          >
-            {{ link.name }}
-          </component>
-        </span>
+            <span class="chevron" aria-hidden="true"
+              ><i class="material-icons">keyboard_arrow_right</i></span
+            >
+            <component
+              :is="index === items.length - 1 ? 'span' : element"
+              class="breadcrumb-label"
+              v-bind="
+                !noLink && index < items.length - 1 ? { to: link.url } : {}
+              "
+              :title="link.name"
+              :aria-current="
+                index === items.length - 1 ? 'location' : undefined
+              "
+            >
+              {{ link.name }}
+            </component>
+          </span>
+        </div>
       </div>
     </div>
   </div>
