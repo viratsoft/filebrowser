@@ -3,6 +3,7 @@ package fbhttp
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/asdine/storm/v3"
 	"github.com/filebrowser/filebrowser/v2/files"
@@ -22,6 +24,41 @@ import (
 	"github.com/spf13/afero"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func TestPublicShareSort(t *testing.T) {
+	root := t.TempDir()
+	for index, name := range []string{"photo2.jpg", "photo10.jpg"} {
+		path := filepath.Join(root, name)
+		if err := os.WriteFile(path, bytes.Repeat([]byte("a"), 2-index), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		modified := time.Unix(int64(index+1)*3600, 0)
+		if err := os.Chtimes(path, modified, modified); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st := scopedUserStorage(t, root, users.Permissions{Share: true, Download: true}, []byte("share-sort"))
+	if err := st.Share.Save(&share.Link{Hash: "sort", Path: "/", UserID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	handler := handle(publicShareHandler, "/api/public/share/", st, &settings.Server{})
+	for query, first := range map[string]string{
+		"":                         "photo2.jpg",
+		"?sort=name&asc=true":      "photo10.jpg",
+		"?sort=size&asc=true":      "photo10.jpg",
+		"?sort=modified&asc=true":  "photo2.jpg",
+		"?sort=modified&asc=false": "photo10.jpg",
+		"?sort=unknown&asc=true":   "photo2.jpg",
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/public/share/sort/"+query, nil))
+		var listing files.Listing
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &listing) != nil ||
+			len(listing.Items) != 2 || listing.Items[0].Name != first {
+			t.Errorf("sort %q: expected %q first, got %d %s", query, first, rec.Code, rec.Body.String())
+		}
+	}
+}
 
 func TestPublicFolderZIPOmitsInProgressUploads(t *testing.T) {
 	root := t.TempDir()

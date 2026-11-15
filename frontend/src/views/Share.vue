@@ -109,13 +109,13 @@
               type="password"
               :placeholder="t('login.password')"
               v-model="password"
-              @keyup.enter="fetchData"
+              @keyup.enter="fetchData()"
             />
           </div>
           <div class="card-action">
             <button
               class="button button--flat"
-              @click="fetchData"
+              @click="fetchData()"
               :aria-label="t('buttons.submit')"
               :data-title="t('buttons.submit')"
             >
@@ -243,7 +243,7 @@
                 :aria-label="
                   sorting.by === column.by
                     ? t(
-                        sorting.asc
+                        sortAscending
                           ? 'files.sortedAscending'
                           : 'files.sortedDescending',
                         { column: t(column.text) }
@@ -258,7 +258,7 @@
                   v-if="sorting.by === column.by"
                   class="material-icons"
                   aria-hidden="true"
-                  >{{ sorting.asc ? "arrow_upward" : "arrow_downward" }}</i
+                  >{{ sortAscending ? "arrow_upward" : "arrow_downward" }}</i
                 >
               </button>
             </div>
@@ -375,11 +375,7 @@ import PublicMediaPreview from "@/components/files/PublicMediaPreview.vue";
 import ShareFolderSize from "@/components/files/ShareFolderSize.vue";
 import urlUtils from "@/utils/url";
 import { closeGalleryRoute } from "@/utils/gallery-history";
-import {
-  sortShareItems,
-  type ShareSort,
-  type ShareSortField,
-} from "@/utils/share-sort";
+import { useStorage } from "@vueuse/core";
 import { name as appName } from "@/utils/constants";
 import { useFileStore } from "@/stores/file";
 import { useLayoutStore } from "@/stores/layout";
@@ -400,7 +396,14 @@ import { useUploadStore } from "@/stores/upload";
 
 const error = ref<StatusError | null>(null);
 const showLimit = ref<number>(100);
-const sorting = ref<ShareSort>({ by: "name", asc: true });
+const sorting = useStorage<Sorting>("public-share-sorting", {
+  by: "name",
+  asc: false,
+});
+// Login's name comparator uses the inverse of the size and time comparators.
+const sortAscending = computed(() =>
+  sorting.value.by === "name" ? !sorting.value.asc : sorting.value.asc
+);
 const sortColumns = [
   { by: "name", text: "files.name", label: "files.sortByName" },
   { by: "size", text: "files.size", label: "files.sortBySize" },
@@ -443,13 +446,12 @@ watch(route, () => {
 const req = computed(() => fileStore.req);
 const isUploadOnly = computed(() => Boolean(req.value?.uploadOnly));
 
-function sortShare(by: ShareSortField) {
+function sortShare(by: (typeof sortColumns)[number]["by"]) {
   const folder = req.value;
   if (!folder?.isDir || folder.uploadOnly || layoutStore.loading) return;
-  sorting.value = { by, asc: sorting.value.by !== by || !sorting.value.asc };
-  fileStore.updateRequest({
-    ...folder,
-    items: sortShareItems(folder.items, sorting.value),
+  void fetchData({
+    by,
+    asc: sorting.value.by === by ? !sorting.value.asc : by !== "name",
   });
 }
 const canSwitchView = computed(
@@ -499,7 +501,7 @@ const modTime = computed(() =>
 
 // Functions
 const base64 = (name: any) => Base64.encodeURI(name);
-const fetchData = async () => {
+const fetchData = async (requestedSort?: Sorting) => {
   if (disposed) return;
   const generation = ++fetchGeneration;
   fetchController?.abort();
@@ -519,8 +521,10 @@ const fetchData = async () => {
   }
   hash.value = shareHash || "";
   fileStore.reload = false;
-  fileStore.selected = [];
-  fileStore.multiple = false;
+  if (!requestedSort) {
+    fileStore.selected = [];
+    fileStore.multiple = false;
+  }
   layoutStore.closeHovers();
 
   // Set loading to true and reset the error.
@@ -535,16 +539,20 @@ const fetchData = async () => {
   if (url[0] !== "/") url = "/" + url;
 
   try {
-    const file = await api.fetch(url, password.value, controller.signal);
+    const file = await api.fetch(
+      url,
+      password.value,
+      controller.signal,
+      "",
+      requestedSort ?? sorting.value
+    );
     if (disposed || generation !== fetchGeneration || route.path !== routePath)
       return;
     file.hash = shareHash;
 
     token.value = file.token || "";
 
-    if (file.isDir && !file.uploadOnly) {
-      file.items = sortShareItems(file.items, sorting.value);
-    }
+    if (requestedSort) sorting.value = requestedSort;
     fileStore.updateRequest(file);
     fileStore.restoreGallerySelection(route.path);
     const previousIndex = fileStore.previousGalleryItemIndex;
@@ -567,7 +575,8 @@ const fetchData = async () => {
     if (disposed || generation !== fetchGeneration || controller.signal.aborted)
       return;
     if (err instanceof Error) {
-      error.value = err;
+      if (requestedSort) $showError(err);
+      else error.value = err;
     }
   } finally {
     if (!disposed && generation === fetchGeneration) {

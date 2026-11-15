@@ -119,7 +119,6 @@ import { pub as api } from "@/api";
 import { useLayoutStore } from "@/stores/layout";
 import url from "@/utils/url";
 import { consumeGallerySelectionShortcut } from "@/utils/gallery-keyboard";
-import { sortShareItems, type ShareSort } from "@/utils/share-sort";
 import HeaderBar from "@/components/header/HeaderBar.vue";
 import Action from "@/components/header/Action.vue";
 import ExtendedImage from "./ExtendedImage.vue";
@@ -134,7 +133,7 @@ const props = defineProps<{
   file: Resource;
   password: string;
   original: boolean;
-  sorting?: ShareSort;
+  sorting?: Sorting;
   selected?: boolean;
   selectedCount?: number;
 }>();
@@ -240,7 +239,8 @@ async function loadSiblings() {
       parent,
       props.password,
       controller.signal,
-      props.file.token
+      props.file.token,
+      props.sorting
     );
     if (
       disposed ||
@@ -250,11 +250,7 @@ async function loadSiblings() {
     )
       return;
     if (listing.isDir && !listing.uploadOnly)
-      siblings.value = (
-        props.sorting
-          ? sortShareItems(listing.items, props.sorting)
-          : listing.items
-      ).filter(
+      siblings.value = listing.items.filter(
         (item) => !item.isDir && ["image", "video", "audio"].includes(item.type)
       );
   } catch {

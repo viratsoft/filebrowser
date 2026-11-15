@@ -191,6 +191,13 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 
 	if file.IsDir {
 		file.Sorting = files.Sorting{By: "name", Asc: false}
+		if !d.rawShare.UploadOnly {
+			query := r.URL.Query()
+			switch by := query.Get("sort"); by {
+			case "name", "size", "modified":
+				file.Sorting = files.Sorting{By: by, Asc: query.Get("asc") == "true"}
+			}
+		}
 		file.ApplySort()
 		if d.rawShare.UploadOnly {
 			// The response is visitor-session-specific. Never allow a browser or

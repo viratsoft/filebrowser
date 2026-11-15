@@ -44,12 +44,20 @@ export async function fetch(
   url: string,
   password: string = "",
   signal?: AbortSignal,
-  token = ""
+  token = "",
+  sorting?: Sorting
 ) {
   url = removePrefix(url);
+  const query = new URLSearchParams();
+  if (token) query.set("token", token);
+  if (sorting) {
+    query.set("sort", sorting.by);
+    query.set("asc", String(sorting.asc));
+  }
 
+  const search = query.toString();
   const res = await fetchURL(
-    `/api/public/share${url}${token ? `?${new URLSearchParams({ token })}` : ""}`,
+    `/api/public/share${url}${search ? `?${search}` : ""}`,
     {
       headers: { "X-SHARE-PASSWORD": encodeURIComponent(password) },
       signal,
